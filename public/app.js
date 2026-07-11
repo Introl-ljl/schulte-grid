@@ -83,6 +83,7 @@ function bindEvents() {
   $('gameStartBtn').addEventListener('click', startPreparedChallenge);
   $('shareBtn').addEventListener('click', () => shareResult());
   $('replayBtn').addEventListener('click', showHome);
+  $('restartBtn').addEventListener('click', restartChallenge);
   $('reloadBtn').addEventListener('click', () => window.location.reload());
   $('showGuideBtn').addEventListener('click', () => {
     app.guideStartsGame = false;
@@ -464,12 +465,22 @@ function renderResult(result, savedAsFirst, newBest = false) {
   const infiniteLabel = INFINITE_MODES[result.mode]?.label || '无限模式';
   $('resultEyebrow').textContent = isDaily ? 'DAILY COMPLETE' : 'INFINITE COMPLETE';
   $('resultTitle').textContent = isDaily ? '今日挑战完成' : `${infiniteLabel}完成`;
-  $('resultTotal').parentElement.classList.toggle('new-best', newBest);
+  const tier = recordTier(result);
+  const totalEl = $('resultTotal').parentElement;
+  totalEl.classList.remove('tier-fastest', 'tier-normal', 'tier-slower');
+  totalEl.classList.add(`tier-${tier}`);
   $('resultTotal').textContent = formatDuration(result.totalMs);
   $('resultErrors').textContent = `${result.totalErrors} 次`;
   $('resultStreakLabel').textContent = isDaily ? '连续完成' : '游玩限制';
   $('resultStreak').textContent = isDaily ? `${calculateStreak()} 天` : '不限次数';
-  $('resultStages').innerHTML = result.stages.map((stage) => `<div><span>${stageDisplayName(stage)}</span><strong>${formatDuration(stage.durationMs)}</strong><small>错误 ${stage.errors}</small></div>`).join('');
+  const stagesEl = $('resultStages');
+  if (result.stages.length > 1) {
+    stagesEl.classList.remove('hidden');
+    stagesEl.innerHTML = result.stages.map((stage, index) => `<div class="sector tier-${stageTier(result, index)}"><span>${stageDisplayName(stage)}</span><b>${formatDuration(stage.durationMs)}</b></div>`).join('');
+  } else {
+    stagesEl.classList.add('hidden');
+    stagesEl.innerHTML = '';
+  }
   $('resultCompareLabel').textContent = isDaily ? '近期对比' : '最快记录';
   $('resultCompare').textContent = isDaily ? comparisonLabel(result) : formatDuration(bestResultFor(result)?.totalMs || result.totalMs);
   $('resultNote').textContent = savedAsFirst
@@ -487,6 +498,55 @@ function comparisonLabel(result) {
   const difference = result.totalMs - average;
   if (Math.abs(difference) < 500) return '与近期持平';
   return difference < 0 ? `快 ${formatDuration(Math.abs(difference))}` : `慢 ${formatDuration(difference)}`;
+}
+
+function recordTier(result) {
+  const baseline = recordBaseline(result);
+  if (baseline == null) return 'fastest';
+  const delta = result.totalMs - baseline;
+  if (delta <= 0) return 'fastest';
+  return delta / Math.max(1, baseline) > 0.1 ? 'slower' : 'normal';
+}
+
+function recordBaseline(result) {
+  if (result.mode === 'daily') {
+    const recent = sortedRecords().filter((record) => record.date < result.date).slice(0, 7);
+    return recent.length ? Math.min(...recent.map((record) => record.totalMs)) : null;
+  }
+  const best = bestResultFor(result);
+  return best ? best.totalMs : null;
+}
+
+function stageTier(record, index) {
+  const samples = sortedRecords()
+    .filter((item) => item.date < record.date && item.stages?.[index])
+    .map((item) => item.stages[index].durationMs);
+  if (!samples.length) return 'fastest';
+  const average = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+  const delta = record.stages[index].durationMs - average;
+  if (delta <= 0) return 'fastest';
+  return delta / Math.max(1, average) > 0.1 ? 'slower' : 'normal';
+}
+
+function renderDailyLap(record) {
+  const board = $('lapBoard');
+  const total = $('lapTotal');
+  const sectors = $('lapSectors').children;
+  board.classList.remove('has-time', 'tier-fastest', 'tier-normal', 'tier-slower');
+  if (!record) {
+    total.textContent = '--:--.---';
+    for (const sector of sectors) sector.querySelector('b').textContent = '--:--.---';
+    return;
+  }
+  board.classList.add('has-time', `tier-${recordTier(record)}`);
+  total.textContent = formatDuration(record.totalMs);
+  record.stages.forEach((stage, index) => {
+    const sector = sectors[index];
+    if (!sector) return;
+    sector.querySelector('b').textContent = formatDuration(stage.durationMs);
+    sector.classList.remove('tier-fastest', 'tier-normal', 'tier-slower');
+    sector.classList.add(`tier-${stageTier(record, index)}`);
+  });
 }
 
 function showHome() {
@@ -509,6 +569,20 @@ function terminateInfiniteChallenge() {
   saveData();
 }
 
+function restartChallenge() {
+  const result = app.active?.result;
+  if (!result) { showHome(); return; }
+  const mode = result.mode || 'daily';
+  app.active = null;
+  app.data.active = null;
+  saveData();
+  if (mode === 'daily') { showHome(); return; }
+  app.activeMode = mode;
+  app.selectedMode = mode;
+  if (mode !== 'fifty' && result.stages?.[0]) app.selectedSize = result.stages[0].size;
+  requestStart(mode);
+}
+
 function renderHome() {
   const date = app.date;
   $('todayLabel').textContent = `${formatChineseDate(date)} · 北京时间`;
@@ -520,6 +594,15 @@ function renderHome() {
   $('challengeState').classList.toggle('complete', Boolean(todayRecord));
   $('challengeState').classList.toggle('in-progress', dailyActive);
   $('challengeState').classList.toggle('used', dailyUsed && !todayRecord && !dailyActive);
+  const dailyTier = $('dailyTier');
+  if (todayRecord) {
+    const tier = recordTier(todayRecord);
+    dailyTier.textContent = tier === 'fastest' ? '最快 · FASTEST' : tier === 'normal' ? '正常 · SOLID' : '偏慢 · OFF PACE';
+    dailyTier.className = `status-tag tier-tag tier-${tier}`;
+  } else {
+    dailyTier.className = 'status-tag tier-tag hidden';
+  }
+  renderDailyLap(todayRecord);
   $('startBtn').innerHTML = startButtonLabel();
   $('startBtn').disabled = !app.level || dailyUsed;
   $('infiniteBtn').innerHTML = infiniteButtonLabel();
@@ -978,6 +1061,7 @@ function checkDateChange() {
 
 function showView(id) {
   for (const view of document.querySelectorAll('.view')) view.classList.toggle('hidden', view.id !== id);
+  document.documentElement.classList.toggle('scroll-locked', id === 'gameView');
 }
 
 function openModal(id) {
@@ -1032,5 +1116,7 @@ function formatDuration(milliseconds) {
 
 function updateHudStars(completedStages, totalStages = activeLevel()?.stages.length || app.level?.stages.length || 3) {
   const count = totalStages;
-  $('hudStars').textContent = Array.from({ length: count }, (_, index) => index < completedStages ? '★' : '☆').join(' ');
+  $('hudStars').innerHTML = Array.from({ length: count }, (_, index) =>
+    index < completedStages ? '<span class="lit">★</span>' : '<span>☆</span>'
+  ).join(' ');
 }
