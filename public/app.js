@@ -391,7 +391,7 @@ function completeStage() {
   }
 
   $('stageCompleteTitle').textContent = `${stageDisplayName(stage)} 完成`;
-  $('stageTime').textContent = `${formatSeconds(durationMs)} 秒`;
+  $('stageTime').textContent = formatDuration(durationMs);
   $('stageErrors').textContent = `${app.active.currentErrors} 次`;
   const next = activeLevel().stages[app.active.stageIndex + 1];
   $('nextStageLabel').textContent = `下一阶段：${stageDisplayName(next)}`;
@@ -445,18 +445,18 @@ function renderResult(result, savedAsFirst, newBest = false) {
   $('resultEyebrow').textContent = isDaily ? 'DAILY COMPLETE' : 'INFINITE COMPLETE';
   $('resultTitle').textContent = isDaily ? '今日挑战完成' : `${infiniteLabel}完成`;
   $('resultTotal').parentElement.classList.toggle('new-best', newBest);
-  $('resultTotal').textContent = formatSeconds(result.totalMs);
+  $('resultTotal').textContent = formatDuration(result.totalMs);
   $('resultErrors').textContent = `${result.totalErrors} 次`;
   $('resultStreakLabel').textContent = isDaily ? '连续完成' : '游玩限制';
   $('resultStreak').textContent = isDaily ? `${calculateStreak()} 天` : '不限次数';
-  $('resultStages').innerHTML = result.stages.map((stage) => `<div><span>${stageDisplayName(stage)}</span><strong>${formatSeconds(stage.durationMs)}</strong><small>错误 ${stage.errors}</small></div>`).join('');
+  $('resultStages').innerHTML = result.stages.map((stage) => `<div><span>${stageDisplayName(stage)}</span><strong>${formatDuration(stage.durationMs)}</strong><small>错误 ${stage.errors}</small></div>`).join('');
   $('resultCompareLabel').textContent = isDaily ? '近期对比' : '最快记录';
-  $('resultCompare').textContent = isDaily ? comparisonLabel(result) : `${formatSeconds(bestResultFor(result)?.totalMs || result.totalMs)} 秒`;
+  $('resultCompare').textContent = isDaily ? comparisonLabel(result) : formatDuration(bestResultFor(result)?.totalMs || result.totalMs);
   $('resultNote').textContent = savedAsFirst
     ? '这是今天唯一一次每日挑战成绩，已保存在当前浏览器。'
     : newBest
       ? `新纪录！这是${infiniteResultName(result)}目前最快的成绩。`
-      : `本次不会计入每日挑战记录，${infiniteResultName(result)}最快为 ${formatSeconds(bestResultFor(result)?.totalMs || result.totalMs)} 秒。`;
+      : `本次不会计入每日挑战记录，${infiniteResultName(result)}最快为 ${formatDuration(bestResultFor(result)?.totalMs || result.totalMs)}。`;
   updateHudStars(activeLevel().stages.length, activeLevel().stages.length);
 }
 
@@ -466,7 +466,7 @@ function comparisonLabel(result) {
   const average = previous.reduce((sum, record) => sum + record.totalMs, 0) / previous.length;
   const difference = result.totalMs - average;
   if (Math.abs(difference) < 500) return '与近期持平';
-  return difference < 0 ? `快 ${formatSeconds(Math.abs(difference))}s` : `慢 ${formatSeconds(difference)}s`;
+  return difference < 0 ? `快 ${formatDuration(Math.abs(difference))}` : `慢 ${formatDuration(difference)}`;
 }
 
 function showHome() {
@@ -501,8 +501,8 @@ function renderHome() {
   $('streakValue').textContent = streak;
   $('streakHint').textContent = streak ? (todayRecord ? '今天也完成了' : '完成今天以延续记录') : '完成今日挑战开始记录';
   const latest = sortedRecords()[0];
-  $('lastScore').textContent = latest ? `${formatSeconds(latest.totalMs)} 秒` : '—';
-  $('hudTimer').textContent = '00:00:00';
+  $('lastScore').textContent = latest ? formatDuration(latest.totalMs) : '—';
+  $('hudTimer').textContent = '00:00.000';
   updateHudStars(todayRecord ? app.level?.stages.length || 3 : 0, app.level?.stages.length || 3);
 }
 
@@ -652,7 +652,7 @@ function stageDisplayName(stage) { return stage.type === 'fifty' ? '1-50' : `${s
 function showHistory() {
   const records = sortedRecords().slice(0, 30);
   $('historyList').innerHTML = records.length
-    ? records.map((record) => `<div class="history-row"><span>${formatChineseDate(record.date)}</span><strong>${formatSeconds(record.totalMs)} 秒</strong><small>错误 ${record.totalErrors}</small></div>`).join('')
+    ? records.map((record) => `<div class="history-row"><span>${formatChineseDate(record.date)}</span><strong>${formatDuration(record.totalMs)}</strong><small>错误 ${record.totalErrors}</small></div>`).join('')
     : '<div class="empty-state">完成第一次每日挑战后，记录会出现在这里。</div>';
   openModal('historyModal');
 }
@@ -720,12 +720,12 @@ async function shareResult(resultOverride = null) {
     const average = stageAverageMs(result, index);
     const errorText = stage.errors === 0 ? '零错误' : `${stage.errors} 次错误`;
     const shareStageName = stageDisplayName(stage).replace('×', 'x');
-    lines.push(`${shareStageName}: ⭐ ${errorText} ⏱️ ${formatShareClock(stage.durationMs)} (平均 ${formatShareClock(average)})`);
+    lines.push(`${shareStageName}: ⭐ ${errorText} ⏱️ ${formatDuration(stage.durationMs)} (平均 ${formatDuration(average)})`);
   });
-  lines.push(`总计: ⏱️ ${formatShareClock(result.totalMs)} · 错误 ${result.totalErrors} 次${isDaily ? ` · 连续 ${calculateStreak()} 天` : ''}`);
+  lines.push(`总计: ⏱️ ${formatDuration(result.totalMs)} · 错误 ${result.totalErrors} 次${isDaily ? ` · 连续 ${calculateStreak()} 天` : ''}`);
   if (!isDaily) {
     const best = bestResultFor(result) || result;
-    lines.push(`最快记录 (${infiniteResultName(result)}): 🏆 ${formatShareClock(best.totalMs)}`);
+    lines.push(`最快记录 (${infiniteResultName(result)}): 🏆 ${formatDuration(best.totalMs)}`);
   }
   const text = lines.join('\n');
   try {
@@ -785,8 +785,8 @@ function paintTimer(force = false) {
   const completed = app.active.stageResults.reduce((sum, item) => sum + item.durationMs, 0);
   const current = app.active.stageStartedAt ? Date.now() - app.active.stageStartedAt : 0;
   const elapsed = completed + current;
-  if (force || $('timerLabel')) $('timerLabel').textContent = formatSeconds(elapsed);
-  $('hudTimer').textContent = formatClock(elapsed);
+  if (force || $('timerLabel')) $('timerLabel').textContent = formatDuration(elapsed);
+  $('hudTimer').textContent = formatDuration(elapsed);
 }
 
 function currentStage() { return activeLevel().stages[app.active.stageIndex]; }
@@ -975,22 +975,12 @@ function addDays(date, offset) {
   return new Date(Date.UTC(year, month - 1, day + offset)).toISOString().slice(0, 10);
 }
 
-function formatSeconds(milliseconds) { return (milliseconds / 1000).toFixed(2); }
-
-function formatClock(milliseconds) {
-  const totalSeconds = Math.floor(milliseconds / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
-}
-
-function formatShareClock(milliseconds) {
-  const totalSeconds = Math.max(0, Math.round(milliseconds / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
+function formatDuration(milliseconds) {
+  const totalMilliseconds = Math.max(0, Math.round(milliseconds));
+  const minutes = Math.floor(totalMilliseconds / 60000);
+  const seconds = Math.floor((totalMilliseconds % 60000) / 1000);
+  const millisecondsPart = totalMilliseconds % 1000;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millisecondsPart).padStart(3, '0')}`;
 }
 
 function updateHudStars(completedStages, totalStages = activeLevel()?.stages.length || app.level?.stages.length || 3) {
