@@ -362,6 +362,7 @@ button:focus-visible, a:focus-visible { outline: 4px solid var(--accent); outlin
   gap: 18px;
   margin-top: 16px;
 }
+.reset-button { color: var(--blue); font-size: 12px; font-weight: 900; white-space: nowrap; }
 .text-button {
   border: 0;
   background: transparent;
@@ -394,17 +395,52 @@ button:focus-visible, a:focus-visible { outline: 4px solid var(--accent); outlin
 .target-row strong { color: var(--ink); font-size: 15px; }
 .target-row b { color: var(--danger); font-size: 21px; }
 .target-row i { font-style: normal; }
-.grid {
+.game-board {
   order: 3;
+  position: relative;
   width: var(--grid-size);
   max-width: calc(100vw - 34px);
   aspect-ratio: 1;
+  margin: 14px auto 0;
+}
+.grid {
+  width: 100%;
+  height: 100%;
   display: grid;
   grid-auto-rows: minmax(0, 1fr);
   align-items: stretch;
   gap: clamp(6px, 1.2vh, 10px);
-  margin: 14px auto 0;
 }
+.game-board.ready {
+  border: 3px solid var(--ink);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 82%, var(--ink) 18%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--panel) 72%, transparent);
+}
+.game-board.ready .grid { visibility: hidden; }
+.game-start-panel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.game-start-button {
+  min-width: min(230px, 72%);
+  min-height: 58px;
+  padding: 12px 28px;
+  border: 3px solid var(--green);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 19px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.game-start-button:hover { transform: translate(-1px, -1px); filter: brightness(1.04); }
+.game-start-button:active { transform: scale(.97); }
+.game-board:not(.ready) .game-start-panel { display: none; }
 .grid-cell {
   width: 100%;
   height: 100%;
@@ -529,6 +565,12 @@ button:focus-visible, a:focus-visible { outline: 4px solid var(--accent); outlin
 .theme-slider-card > div:first-child { display: flex; justify-content: space-between; gap: 12px; }
 .theme-slider-card small { color: var(--blue); font-weight: 900; }
 .modal-card > .primary-button { width: 100%; }
+.update-modal { width: min(500px, 100%); }
+.update-list { list-style: none; padding: 0; margin: 21px 0 24px; display: grid; gap: 16px; text-align: left; }
+.update-list li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+.update-list li > b { display: grid; place-items: center; width: 34px; aspect-ratio: 1; border: 2px solid var(--green); border-radius: 50%; color: var(--green); font-size: 11px; }
+.update-list strong, .update-list small { display: block; }
+.update-list small { margin-top: 4px; color: #777; font-family: Georgia, "Songti SC", serif; line-height: 1.5; }
 .stage-complete { text-align: center; }
 .completion-mark { display: grid; place-items: center; width: 55px; aspect-ratio: 1; margin: 0 auto 14px; border: 6px solid var(--green); border-radius: 50%; font-size: 24px; font-weight: 900; }
 .stage-result { display: flex; justify-content: center; gap: 22px; padding: 12px 0; border-block: 2px solid #aaa; margin-bottom: 15px; }
@@ -569,8 +611,6 @@ button:focus-visible, a:focus-visible { outline: 4px solid var(--accent); outlin
 .settings-actions .danger-button { grid-column: 1 / -1; background: var(--danger); color: #fff; }
 .confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
 .danger-fill { background: var(--danger); }
-.countdown { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: var(--background); }
-.countdown strong { font-size: min(34vw, 230px); font-weight: 900; animation: count .65s ease both; }
 .date-notice, .toast {
   position: fixed;
   z-index: 50;
@@ -598,7 +638,6 @@ button:focus-visible, a:focus-visible { outline: 4px solid var(--accent); outlin
 @keyframes correct {
   50% { transform: scale(.9); border-color: hsl(var(--grid-hue) 70% 32%); background: var(--cell-correct); box-shadow: 0 0 0 7px hsl(var(--grid-hue) 75% 48% / .2); }
 }
-@keyframes count { from { opacity: 0; transform: scale(.75); } to { opacity: 1; transform: scale(1); } }
 @keyframes bestBadge { from { opacity: 0; transform: translateY(8px) scale(.8); } 65% { transform: translateY(-2px) scale(1.06); } }
 @keyframes bestNumber { from { opacity: 0; transform: scale(.65) rotate(-2deg); } 60% { transform: scale(1.12) rotate(1deg); } to { opacity: 1; transform: scale(1); } }
 @keyframes goldSweep { to { background-position: -220% center; } }
@@ -634,7 +673,8 @@ button:focus-visible, a:focus-visible { outline: 4px solid var(--accent); outlin
   .game-view { min-height: calc(100dvh - 151px); justify-content: flex-start; margin-top: 0; }
   .game-heading h2 { font-size: 29px; }
   .progress-line, .target-row { width: min(430px, 96%); }
-  .grid { margin-top: 10px; gap: 5px; }
+  .game-board { margin-top: 10px; }
+  .grid { gap: 5px; }
   .grid-cell { border-width: 3px; border-radius: 8px; font-size: clamp(18px, calc(47px - var(--size) * 4px), 30px); }
   .game-meta { margin-top: 11px; }
   .result-view h1 { font-size: 37px; }

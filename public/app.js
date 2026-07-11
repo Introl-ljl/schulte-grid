@@ -1,5 +1,6 @@
 const TIME_ZONE = 'Asia/Shanghai';
 const STORAGE_KEY = 'schulte-daily-v1';
+const UPDATE_LOG_KEY = 'schulte-update-ready-start-v1';
 const INFINITE_MODES = {
   easy: { label: '简单模式' },
   classic: { label: '经典模式' },
@@ -43,6 +44,7 @@ async function initialize() {
   detectStorageAvailability();
   await loadLevels();
   renderHome();
+  showUpdateLogOnce();
   checkDateChange();
   window.setInterval(checkDateChange, 30000);
   registerServiceWorker();
@@ -67,17 +69,18 @@ function bindEvents() {
     if (size) selectSize(size);
   });
   $('dailyResumeBtn').addEventListener('click', resumeChallenge);
-  $('infiniteResumeBtn').addEventListener('click', resumeChallenge);
   $('dailyShareBtn').addEventListener('click', () => shareResult(app.data.records[app.date]));
   $('guideStartBtn').addEventListener('click', () => {
     app.data.seenGuide = true;
     saveData();
     closeModal('guideModal');
-    if (app.guideStartsGame) beginCountdown();
+    if (app.guideStartsGame) prepareChallenge();
     app.guideStartsGame = false;
   });
   $('continueBtn').addEventListener('click', advanceStage);
   $('abandonBtn').addEventListener('click', confirmAbandon);
+  $('resetBtn').addEventListener('click', resetInfiniteChallenge);
+  $('gameStartBtn').addEventListener('click', startPreparedChallenge);
   $('shareBtn').addEventListener('click', () => shareResult());
   $('replayBtn').addEventListener('click', showHome);
   $('reloadBtn').addEventListener('click', () => window.location.reload());
@@ -147,6 +150,7 @@ async function loadLevels() {
     const savedLevel = savedMode === 'daily' ? app.level : saved?.level;
     if (
       saved &&
+      savedMode === 'daily' &&
       savedLevel &&
       saved.date === app.date &&
       saved.levelId === savedLevel.id &&
@@ -207,40 +211,23 @@ function requestStart(mode) {
     openModal('guideModal');
     return;
   }
-  beginCountdown();
+  prepareChallenge();
 }
 
-function beginCountdown() {
+function prepareChallenge() {
   if (app.activeMode === 'daily') {
     if (hasUsedDailyAttempt()) {
       toast('今日挑战机会已使用，请明天再来');
       showHome();
       return;
     }
-    claimDailyAttempt();
   }
   app.active = createActiveChallenge();
-  app.data.active = app.active;
+  app.data.active = null;
   saveData();
   showView('gameView');
   renderGame();
-  const overlay = $('countdown');
-  overlay.classList.remove('hidden');
-  const sequence = ['3', '2', '1', '开始'];
-  let index = 0;
-  const tick = () => {
-    overlay.innerHTML = `<strong>${sequence[index]}</strong>`;
-    index += 1;
-    if (index < sequence.length) {
-      window.setTimeout(tick, app.data.settings.reduceMotion ? 180 : 700);
-    } else {
-      window.setTimeout(() => {
-        overlay.classList.add('hidden');
-        startStageClock();
-      }, app.data.settings.reduceMotion ? 100 : 520);
-    }
-  };
-  tick();
+  stopTimer();
 }
 
 function createActiveChallenge() {
@@ -274,18 +261,47 @@ function resumeChallenge() {
     app.active.target = stageStartValue(currentStage());
     app.active.currentErrors = 0;
   }
-  if (!app.active.stageStartedAt) app.active.stageStartedAt = Date.now();
+  if (!app.active.stageStartedAt && app.active.stageResults.length > 0) app.active.stageStartedAt = Date.now();
   showView('gameView');
   renderGame();
-  startTimer();
+  if (app.active.stageStartedAt) startTimer();
+  else stopTimer();
 }
 
-function startStageClock() {
-  if (!app.active) return;
+function startPreparedChallenge() {
+  if (!isAwaitingInitialStart()) return;
+  if (app.active.mode === 'daily') {
+    const savedAttempt = app.data.active?.createdAt === app.active.createdAt;
+    if (hasUsedDailyAttempt() && !savedAttempt) {
+      toast('今日挑战机会已使用，请明天再来');
+      app.active = null;
+      showHome();
+      return;
+    }
+    claimDailyAttempt(app.active.createdAt);
+  }
   app.active.stageStartedAt = Date.now();
   persistActive();
   renderGame();
   startTimer();
+}
+
+function resetInfiniteChallenge() {
+  if (!app.active || app.active.finished || app.active.mode === 'daily') return;
+  const mode = app.active.mode;
+  const level = activeLevel();
+  stopTimer();
+  window.clearTimeout(app.stageAdvanceTimer);
+  closeModal('stageModal');
+  app.activeMode = mode;
+  app.selectedMode = mode;
+  if (mode !== 'fifty') app.selectedSize = level.stages[0].size;
+  app.active = createActiveChallenge();
+  app.data.active = null;
+  saveData();
+  showView('gameView');
+  renderGame();
+  toast('游戏已重置，准备好后点击开始游戏');
 }
 
 function renderGame() {
@@ -301,6 +317,10 @@ function renderGame() {
   $('errorLabel').textContent = `错误 ${totalErrors()}`;
   $('gameModeBadge').textContent = modeLabel(app.active.mode);
   $('abandonBtn').textContent = app.active.mode === 'daily' ? '放弃今日挑战' : '退出无限模式';
+  $('resetBtn').classList.toggle('hidden', app.active.mode === 'daily');
+  const awaitingStart = isAwaitingInitialStart();
+  $('gameBoard').classList.toggle('ready', awaitingStart);
+  $('gameStartPanel').setAttribute('aria-hidden', String(!awaitingStart));
   $('progressBar').style.width = `${((app.active.target - start) / (end - start + 1)) * 100}%`;
   $('stageDots').innerHTML = level.stages.map((_, index) => `<i class="${index < app.active.stageIndex ? 'done' : index === app.active.stageIndex ? 'active' : ''}"></i>`).join('');
   updateHudStars(app.active.stageIndex, level.stages.length);
@@ -472,8 +492,21 @@ function comparisonLabel(result) {
 function showHome() {
   stopTimer();
   closeAllModals();
+  if (app.active && !app.active.finished && app.active.mode !== 'daily') terminateInfiniteChallenge();
+  if (isAwaitingInitialStart() && app.active.mode === 'daily' && !hasUsedDailyAttempt()) {
+    app.active = null;
+    app.data.active = null;
+    saveData();
+  }
   showView('homeView');
   renderHome();
+}
+
+function terminateInfiniteChallenge() {
+  if (!app.active || app.active.mode === 'daily') return;
+  app.active = null;
+  app.data.active = null;
+  saveData();
 }
 
 function renderHome() {
@@ -492,11 +525,8 @@ function renderHome() {
   $('infiniteBtn').innerHTML = infiniteButtonLabel();
   $('infiniteBtn').disabled = !app.level;
   renderModeButtons();
-  const infiniteActive = Boolean(app.active && !app.active.finished && app.active.mode !== 'daily');
   $('dailyResumeBtn').classList.toggle('hidden', !dailyActive);
   $('dailyShareBtn').classList.toggle('hidden', !todayRecord);
-  $('infiniteResumeBtn').classList.toggle('hidden', !infiniteActive);
-  if (infiniteActive) $('infiniteResumeBtn').textContent = `继续${INFINITE_MODES[app.active.mode]?.label || '无限模式'}`;
   const streak = calculateStreak();
   $('streakValue').textContent = streak;
   $('streakHint').textContent = streak ? (todayRecord ? '今天也完成了' : '完成今天以延续记录') : '完成今日挑战开始记录';
@@ -586,6 +616,10 @@ function hasUsedDailyAttempt() {
 
 function isDailyActive() {
   return Boolean(app.active && !app.active.finished && app.active.mode === 'daily' && app.active.date === app.date);
+}
+
+function isAwaitingInitialStart() {
+  return Boolean(app.active && !app.active.finished && app.active.stageIndex === 0 && app.active.stageResults.length === 0 && !app.active.stageStartedAt);
 }
 
 function claimDailyAttempt(startedAt = new Date().toISOString()) {
@@ -819,8 +853,21 @@ function trimDailyAttempts() {
 
 function persistActive() {
   if (!app.active || app.active.finished) return;
+  if (app.active.mode !== 'daily') {
+    app.data.active = null;
+    saveData();
+    return;
+  }
   app.data.active = app.active;
   saveData();
+}
+
+function showUpdateLogOnce() {
+  try {
+    if (localStorage.getItem(UPDATE_LOG_KEY)) return;
+    localStorage.setItem(UPDATE_LOG_KEY, new Date().toISOString());
+  } catch { /* Storage-disabled browsers may see the notice again after reload. */ }
+  openModal('updateModal');
 }
 
 function loadData() {

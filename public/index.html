@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#f3f0e8" />
     <meta name="description" content="每天一套固定的舒尔特方格，完成 3×3、4×4、5×5 与 1-50 四关挑战。" />
     <title>每日方格 · Schulte Daily</title>
-    <link rel="stylesheet" href="styles.css?v=14" />
+    <link rel="stylesheet" href="styles.css?v=15" />
   </head>
   <body>
     <div id="dateNotice" class="date-notice hidden" role="status">
@@ -77,7 +77,6 @@
               <button type="button" class="size-button" data-size="6" aria-pressed="false">6×6</button>
             </div>
             <button id="infiniteBtn" class="secondary-button">开始简单模式 <span>→</span></button>
-            <button id="infiniteResumeBtn" class="secondary-button hidden">继续无限模式</button>
           </article>
         </div>
         <p id="loadMessage" class="inline-message" role="status"></p>
@@ -104,8 +103,13 @@
           <div class="timer"><span>总计时</span><strong id="timerLabel">00:00.000</strong></div>
         </div>
         <div class="progress-line"><span id="progressBar"></span></div>
-        <div class="target-row"><span>当前</span><strong><b id="targetLabel">1</b> / <i id="maxLabel">9</i></strong><span id="errorLabel">错误 0</span></div>
-        <div id="grid" class="grid" role="group" aria-label="舒尔特方格"></div>
+        <div class="target-row"><span>当前</span><strong><b id="targetLabel">1</b> / <i id="maxLabel">9</i></strong><button class="text-button reset-button hidden" id="resetBtn">↻ 重置游戏</button><span id="errorLabel">错误 0</span></div>
+        <div id="gameBoard" class="game-board ready">
+          <div id="grid" class="grid" role="group" aria-label="舒尔特方格"></div>
+          <div id="gameStartPanel" class="game-start-panel">
+            <button id="gameStartBtn" class="game-start-button">开始游戏</button>
+          </div>
+        </div>
         <p class="game-help">请按数字从小到大依次点击</p>
       </section>
 
@@ -127,8 +131,6 @@
         </div>
       </section>
     </main>
-
-    <div id="countdown" class="countdown hidden" aria-live="assertive"><strong>3</strong></div>
 
     <div id="stageModal" class="modal hidden" aria-hidden="true">
       <div class="modal-backdrop"></div>
@@ -200,6 +202,21 @@
       </div>
     </div>
 
+    <div id="updateModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="updateModal"></div>
+      <div class="modal-card update-modal" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
+        <button class="modal-close" data-close="updateModal" aria-label="关闭">×</button>
+        <p class="eyebrow">WHAT'S NEW</p>
+        <h2 id="updateTitle">本次更新</h2>
+        <ul class="update-list">
+          <li><b>01</b><span><strong>准备好再开始</strong><small>每日挑战与无限模式取消倒计时，进入棋盘后点击“开始游戏”才会计时。</small></span></li>
+          <li><b>02</b><span><strong>无限模式退出即结束</strong><small>无限模式不再保留中途进度，退出后可重新开一局。</small></span></li>
+          <li><b>03</b><span><strong>新增快速重置</strong><small>无限模式游戏中可以一键重置当前玩法和棋盘。</small></span></li>
+        </ul>
+        <button class="primary-button" data-close="updateModal">知道了</button>
+      </div>
+    </div>
+
     <div id="confirmModal" class="modal hidden" aria-hidden="true">
       <div class="modal-backdrop" data-close="confirmModal"></div>
       <div class="modal-card compact-modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
@@ -209,7 +226,7 @@
     </div>
 
     <div id="toast" class="toast hidden" role="status"></div>
-    <script src="theme.js?v=14"></script>
-    <script src="app.js?v=14"></script>
+    <script src="theme.js?v=15"></script>
+    <script src="app.js?v=15"></script>
   </body>
 </html>
