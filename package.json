@@ -1,0 +1,13 @@
+{
+  "name": "schulte-grid",
+  "version": "1.0.0",
+  "description": "Daily static Schulte grid challenge",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "generate": "node scripts/generate-levels.js",
+    "build": "npm run generate",
+    "test": "node scripts/test-levels.js",
+    "start": "node server.js"
+  }
+}

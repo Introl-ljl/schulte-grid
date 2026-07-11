@@ -1,0 +1,8 @@
+services:
+  schulte-grid:
+    build: .
+    ports:
+      - "3030:3000"
+    environment:
+      - PORT=3000
+    restart: unless-stopped
