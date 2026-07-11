@@ -715,11 +715,11 @@ async function shareResult(resultOverride = null) {
   const heading = isDaily
     ? `${month}月 ${day} - 每日方格 #${result.levelId}`
     : `${month}月 ${day} - 每日方格 · ${INFINITE_MODES[result.mode]?.label || '无限模式'}`;
-  const lines = ['https://playlinkr.net', heading];
+  const lines = ['https://game.introl.me', heading];
   result.stages.forEach((stage, index) => {
     const average = stageAverageMs(result, index);
     const errorText = stage.errors === 0 ? '零错误' : `${stage.errors} 次错误`;
-    lines.push(`舒尔特方格 ${index + 1} (${stageDisplayName(stage)}): ⭐ ${errorText} ⏱️ ${formatShareClock(stage.durationMs)} (平均 ${formatShareClock(average)})`);
+    lines.push(`${stageDisplayName(stage)}: ⭐ ${errorText} ⏱️ ${formatShareClock(stage.durationMs)} (平均 ${formatShareClock(average)})`);
   });
   lines.push(`总计: ⏱️ ${formatShareClock(result.totalMs)} · 错误 ${result.totalErrors} 次${isDaily ? ` · 连续 ${calculateStreak()} 天` : ''}`);
   if (!isDaily) {
