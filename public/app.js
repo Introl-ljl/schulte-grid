@@ -719,7 +719,8 @@ async function shareResult(resultOverride = null) {
   result.stages.forEach((stage, index) => {
     const average = stageAverageMs(result, index);
     const errorText = stage.errors === 0 ? '零错误' : `${stage.errors} 次错误`;
-    lines.push(`${stageDisplayName(stage)}: ⭐ ${errorText} ⏱️ ${formatShareClock(stage.durationMs)} (平均 ${formatShareClock(average)})`);
+    const shareStageName = stageDisplayName(stage).replace('×', 'x');
+    lines.push(`${shareStageName}: ⭐ ${errorText} ⏱️ ${formatShareClock(stage.durationMs)} (平均 ${formatShareClock(average)})`);
   });
   lines.push(`总计: ⏱️ ${formatShareClock(result.totalMs)} · 错误 ${result.totalErrors} 次${isDaily ? ` · 连续 ${calculateStreak()} 天` : ''}`);
   if (!isDaily) {
