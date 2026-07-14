@@ -441,6 +441,8 @@ async function startPreparedChallenge() {
       if (error.code === 'STALE_DAILY_LEVEL') $('dateNotice').classList.remove('hidden');
       return;
     }
+    button.disabled = false;
+    button.textContent = '开始游戏';
   }
   if (app.active.mode === 'daily') {
     const savedAttempt = app.data.active?.createdAt === app.active.createdAt;
@@ -493,6 +495,11 @@ function renderGame() {
   const awaitingStart = isAwaitingInitialStart();
   $('gameBoard').classList.toggle('ready', awaitingStart);
   $('gameStartPanel').setAttribute('aria-hidden', String(!awaitingStart));
+  if (awaitingStart) {
+    const startBtn = $('gameStartBtn');
+    startBtn.disabled = false;
+    startBtn.textContent = '开始游戏';
+  }
   $('progressBar').style.width = `${((app.active.target - start) / (end - start + 1)) * 100}%`;
   $('stageDots').innerHTML = level.stages.map((_, index) => `<i class="${index < app.active.stageIndex ? 'done' : index === app.active.stageIndex ? 'active' : ''}"></i>`).join('');
   updateHudStars(app.active.stageIndex, level.stages.length);
