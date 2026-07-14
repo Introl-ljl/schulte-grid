@@ -504,13 +504,19 @@ function renderGame() {
   const start = stageStartValue(stage);
   const end = stageEndValue(stage);
   const level = activeLevel();
+  $('gameView').classList.remove('disc-active');
+  $('gameBoard').classList.remove('disc');
+  $('discCanvas').classList.add('hidden');
+  $('discControls').classList.add('hidden');
   $('stageLabel').textContent = `第 ${app.active.stageIndex + 1} / ${level.stages.length} 阶段`;
   $('gridSizeLabel').textContent = stage.type === 'fifty' ? '5×5 · 1-50' : `${stage.size}×${stage.size}`;
   $('targetLabel').textContent = Math.min(app.active.target, end);
   $('maxLabel').textContent = end;
   $('errorLabel').textContent = `错误 ${totalErrors()}`;
   $('gameModeBadge').textContent = modeLabel(app.active.mode);
+  $('gameHelp').textContent = '请按数字从小到大依次点击';
   $('abandonBtn').textContent = app.active.mode === 'daily' ? '放弃今日挑战' : app.active.mode === 'replay' ? '退出复战' : '退出无限模式';
+  $('abandonBtn').classList.remove('hidden');
   $('resetBtn').classList.toggle('hidden', app.active.mode === 'daily');
   const awaitingStart = isAwaitingInitialStart();
   $('gameBoard').classList.toggle('ready', awaitingStart);
@@ -684,6 +690,10 @@ function renderResult(result, savedAsFirst, newBest = false) {
   if (isReplay) {
     $('resultCompareLabel').textContent = '复战说明';
     $('resultCompare').textContent = '随机布局 · 可多次挑战';
+  } else if (result.mode === 'disc') {
+    const best = bestResultFor(result) || result;
+    $('resultCompareLabel').textContent = '本地最快';
+    $('resultCompare').textContent = formatDuration(best.totalMs);
   } else {
     $('resultCompareLabel').textContent = result.globalRank ? (result.globalRankIsBest ? '用户最佳排名' : '全局排名') : isDaily ? '近期对比' : '本地最快';
     $('resultCompare').textContent = result.globalRank ? `第 ${result.globalRank} 名` : isDaily ? comparisonLabel(result) : formatDuration(bestResultFor(result)?.totalMs || result.totalMs);
@@ -694,13 +704,17 @@ function renderResult(result, savedAsFirst, newBest = false) {
         : `本次不会计入每日挑战记录，${infiniteResultName(result)}最快为 ${formatDuration(bestResultFor(result)?.totalMs || result.totalMs)}。`)
     : isReplay
       ? '复战使用随机布局，成绩不计入每日记录，可在完成每日挑战后反复游玩。'
-      : result.syncError
-        ? `本地成绩已保存，但未进入全局榜：${result.syncError}`
-        : result.globalRank
-          ? `成绩已进入${infiniteResultName(result)}今日全局榜，目前排名第 ${result.globalRank}。`
-          : newBest
-            ? `本地新纪录！正在同步${infiniteResultName(result)}全局榜。`
-            : `成绩正在同步，当前本地最快为 ${formatDuration(bestResultFor(result)?.totalMs || result.totalMs)}。`;
+      : result.mode === 'disc'
+        ? (newBest
+            ? `本地新纪录！旋转舒尔特（${result.discName || ''}）最佳为 ${formatDuration(result.totalMs)}。`
+            : `成绩已保存，本地最快为 ${formatDuration((bestResultFor(result) || result).totalMs)}。`)
+        : result.syncError
+          ? `本地成绩已保存，但未进入全局榜：${result.syncError}`
+          : result.globalRank
+            ? `成绩已进入${infiniteResultName(result)}今日全局榜，目前排名第 ${result.globalRank}。`
+            : newBest
+              ? `本地新纪录！正在同步${infiniteResultName(result)}全局榜。`
+              : `成绩正在同步，当前本地最快为 ${formatDuration(bestResultFor(result)?.totalMs || result.totalMs)}。`;
   updateHudStars(activeLevel().stages.length, activeLevel().stages.length);
 }
 
@@ -814,6 +828,7 @@ function restartChallenge() {
   app.data.active = null;
   saveData();
   if (mode === 'daily') { showHome(); return; }
+  if (mode === 'disc') { startDiscGame(); return; }
   app.activeMode = mode;
   app.selectedMode = mode;
   if (mode !== 'fifty' && result.stages?.[0]) app.selectedSize = result.stages[0].size;
@@ -881,9 +896,26 @@ function startDiscGame() {
   canvas.width = size;
   canvas.height = size;
 
-  $('discGameView').classList.remove('hidden');
-  $('gameBoard').classList.add('hidden');
-  $('discTitle').textContent = `旋转舒尔特 · ${DiscMode.levels[app.discDifficulty].name}`;
+  // 复用标准游戏页的头部、进度与目标栏
+  showView('gameView');
+  const gameView = $('gameView');
+  const gameBoard = $('gameBoard');
+  gameView.classList.add('disc-active');
+  gameBoard.classList.add('disc');
+  gameBoard.classList.remove('ready');
+  $('grid').classList.add('hidden');
+  canvas.classList.remove('hidden');
+  $('discControls').classList.remove('hidden');
+  $('abandonBtn').classList.add('hidden');
+  $('stageDots').classList.add('hidden');
+  $('gameModeBadge').textContent = '旋转舒尔特';
+  $('gameHelp').textContent = '按数字从小到大点击旋转的圆盘';
+  $('stageLabel').textContent = '旋转追踪';
+  $('gridSizeLabel').textContent = DiscMode.levels[app.discDifficulty].name;
+  $('timerLabel').textContent = '00:00.000';
+  $('progressBar').style.width = '0%';
+  $('targetLabel').textContent = '1';
+  $('errorLabel').textContent = '错误 0';
 
   // 开始游戏循环
   let lastTime = performance.now();
@@ -898,9 +930,12 @@ function startDiscGame() {
 
     // 更新 UI
     const level = DiscMode.levels[DiscMode.state.difficulty];
-    $('discProgress').textContent = `${DiscMode.state.target - 1} / ${level.total}`;
-    $('discErrors').textContent = `错误 ${DiscMode.state.errors}`;
-    $('discTimer').textContent = formatDuration(DiscMode.state.totalTime);
+    const done = DiscMode.state.target - 1;
+    $('timerLabel').textContent = formatDuration(DiscMode.state.totalTime);
+    $('progressBar').style.width = `${(done / level.total) * 100}%`;
+    $('targetLabel').textContent = DiscMode.state.target;
+    $('maxLabel').textContent = level.total;
+    $('errorLabel').textContent = `错误 ${DiscMode.state.errors}`;
 
     requestAnimationFrame(gameLoop);
   };
@@ -939,19 +974,46 @@ function finishDiscGame() {
   app.discGameActive = false;
   const time = DiscMode.state.totalTime;
   const errors = DiscMode.state.errors;
+  const level = DiscMode.levels[app.discDifficulty];
 
-  toast(`完成！用时 ${formatDuration(time)}，错误 ${errors} 次`);
+  const result = {
+    date: app.date,
+    levelId: `disc-${app.discDifficulty}`,
+    mode: 'disc',
+    discName: level.name,
+    totalMs: time,
+    totalErrors: errors,
+    stages: [{ type: 'disc', size: level.total, name: level.name, durationMs: time, errors }],
+    completedAt: new Date().toISOString()
+  };
 
-  setTimeout(() => {
-    quitDiscGame();
-    showHome();
-  }, 2000);
+  const newBest = saveBestResult(result);
+  app.active = { mode: 'disc', result, finished: true };
+  feedback('finish');
+
+  exitDiscGame();
+  renderResult(result, false, newBest);
+  showView('resultView');
+}
+
+function exitDiscGame() {
+  app.discGameActive = false;
+  const gameView = $('gameView');
+  const gameBoard = $('gameBoard');
+  gameView.classList.remove('disc-active');
+  gameBoard.classList.remove('disc');
+  $('discCanvas').classList.add('hidden');
+  $('grid').classList.remove('hidden');
+  $('discControls').classList.add('hidden');
+  $('abandonBtn').classList.remove('hidden');
+  $('stageDots').classList.remove('hidden');
+  const canvas = $('discCanvas');
+  if (canvas) canvas.onclick = null;
 }
 
 function quitDiscGame() {
-  app.discGameActive = false;
-  $('discGameView').classList.add('hidden');
-  $('gameBoard').classList.remove('hidden');
+  exitDiscGame();
+  showHome();
 }
 
 function selectSize(size) {
@@ -1030,6 +1092,7 @@ function bestResultFor(result) {
 }
 
 function infiniteResultName(result) {
+  if (result.mode === 'disc') return '旋转舒尔特';
   if (result.mode === 'fifty') return '1-50 模式';
   return `${INFINITE_MODES[result.mode]?.label || '无限模式'} ${result.stages?.[0]?.size || app.selectedSize}×${result.stages?.[0]?.size || app.selectedSize}`;
 }
@@ -1130,7 +1193,11 @@ function modeLabel(mode = 'daily') {
 
 function stageStartValue() { return 1; }
 function stageEndValue(stage) { return stage.type === 'fifty' ? 50 : Math.max(...stage.layout); }
-function stageDisplayName(stage) { return stage.type === 'fifty' ? '1-50' : `${stage.size}×${stage.size}`; }
+function stageDisplayName(stage) {
+  if (stage.type === 'fifty') return '1-50';
+  if (stage.type === 'disc') return stage.name || '圆盘';
+  return `${stage.size}×${stage.size}`;
+}
 
 function showHistory() {
   const records = sortedRecords().slice(0, 30);

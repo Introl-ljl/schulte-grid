@@ -396,37 +396,12 @@ html.scroll-locked, html.scroll-locked body { overflow: hidden; height: 100%; }
 .disc-simple-toggle:active { transform: scale(.98); }
 .disc-simple-toggle.active { border-color: var(--blue); background: var(--blue); color: #fff; box-shadow: 2px 2px 0 var(--line); }
 
-.disc-game-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding: 20px;
-  width: 100%;
-}
-.disc-header {
-  text-align: center;
-  width: 100%;
-}
-.disc-header h2 {
-  margin: 0 0 8px;
-  font-size: 28px;
-  font-weight: 900;
-  color: var(--purple);
-}
-.disc-stats {
+.disc-controls {
   display: flex;
   justify-content: center;
-  gap: 16px;
-  font-size: 15px;
-  font-weight: 700;
-}
-.disc-stats span {
-  padding: 5px 12px;
-  border: 2px solid var(--soft);
-  border-radius: 999px;
-  background: var(--surface);
-  font-variant-numeric: tabular-nums;
+  width: 100%;
+  max-width: 400px;
+  margin-top: 4px;
 }
 
 #discCanvas {
@@ -438,12 +413,10 @@ html.scroll-locked, html.scroll-locked body { overflow: hidden; height: 100%; }
   touch-action: none;
 }
 
-.disc-controls {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  max-width: 400px;
-}
+.game-board.disc .grid,
+.game-board.disc .game-start-panel { display: none; }
+.game-view.disc-active .game-heading .timer { display: flex; }
+
 .disc-quit-button {
   min-width: 160px;
   min-height: 48px;
