@@ -1,8 +1,50 @@
+name: schulte-grid
+
 services:
-  schulte-grid:
-    build: .
-    ports:
-      - "3030:3000"
-    environment:
-      - PORT=3000
+  postgres:
+    image: postgres:16-alpine
+    container_name: schulte-postgres
     restart: unless-stopped
+    env_file:
+      - .env.backend
+    volumes:
+      - schulte_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - backend
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: schulte-api
+    restart: unless-stopped
+    env_file:
+      - .env.backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "192.168.1.104:3030:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+      - edge
+
+volumes:
+  schulte_postgres_data:
+    name: schulte_postgres_data
+
+networks:
+  backend:
+    internal: true
+  edge:
+    driver: bridge

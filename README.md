@@ -1,48 +1,106 @@
 # 每日方格
 
-每日固定关卡的舒尔特方格静态 Web 游戏。每个北京时间自然日提供同一套 3×3、4×4、5×5、1-50 四关挑战；每日挑战从首次开始时占用当天机会，每天只能玩一次。玩法选择仅作用于无限模式：简单模式和经典模式支持 3×3、4×4、5×5、6×6，1-50 模式固定使用双层 5×5 方格，均可无限重复游玩。成绩与每日挑战状态仅保存在浏览器本地。
+舒尔特方格 Web 游戏：北京时间每天提供同一套 3×3、4×4、5×5、1-50 四关每日挑战，同时保留简单、经典、1-50 三类无限模式。每日复战使用随机布局，但不会进入排行榜。
 
-方格使用统一主题色，首次引导和设置页均提供主题色滑动条，可在六套颜色中切换并保存到当前浏览器。
+前端仍是原生 HTML/CSS/JS，静态资源位于 `public/`。Vercel Functions 只负责同源安全代理，用户、正式运行和成绩由当前服务器上的 `backend/` Node 服务处理，并写入 Docker Compose 管理的 PostgreSQL。
 
-无限模式会按照玩法与规格分别保存本地最快成绩；刷新纪录时结算时间使用金色动画展示，分享文本也会包含对应模式规格的最快纪录。
+## 用户与排行榜规则
 
-## 本地运行
+- 入口是公共链接，不使用邮箱或 OAuth。首次打开必须输入用户名和 4 位 PIN 登录，没有用户时可以自由注册并自动登录。
+- 不提供公开用户选择列表；用户名只在排行榜和当前用户界面中展示。
+- PIN 使用 Node.js `scrypt` 加盐哈希；登录会话是 30 天有效的 HttpOnly、SameSite=Lax Cookie。
+- PIN 登录按“用户 + IP”和 IP 总量限流。`AUTH_PEPPER` 只用于不可逆地散列请求 IP，不会保存原始 IP。
+- 每日挑战由数据库按“用户 + 北京时间日期”强制每天只能开始一次；开始后放弃也不能重新计时。
+- 简单、经典、1-50 无限模式每次正式完成都会提交；排行榜按每个用户在所选时间范围内的最佳成绩展示。
+- 每日复战的 `replay` 模式不会创建服务端运行，也不能提交成绩。
+- 普通紫色表示该玩法/规格的“今日全体最快”；其他人提交更快成绩后会动态改变。
+- 特殊深紫渐变表示跨日期“整体最速”，优先级高于今日最快。
+
+## 本地开发
+
+仅查看静态页面和关卡生成：
 
 ```bash
 npm run build
 npm start
 ```
 
-访问 `http://localhost:3000`。
+访问 `http://localhost:3000`。这个零依赖静态服务器不运行 Functions，因此登录与排行榜会显示离线。
 
-## 关卡生成
-
-`npm run build` 默认从北京时间当天开始生成 8 天关卡（当天和未来 7 天）。可通过环境变量调整：
+运行后端与数据库：
 
 ```bash
-LEVEL_START_DATE=2026-07-10 LEVEL_DAYS=8 npm run build
+npm install
+cp .env.example .env.backend
+# 替换数据库密码、AUTH_PEPPER 和 PROXY_SECRET
+docker compose up -d --build
 ```
 
-生成结果位于 `public/data/daily-levels.json`。布局由日期、规格和规则版本确定，并经过连续数字相邻、直线排列和自然顺序接近度检查。
+生产 Compose 不映射 PostgreSQL 端口。API 只绑定宿主机内网地址 `192.168.1.104:3030`，供 Cloudflare Tunnel 使用。
+
+常用运维命令：
+
+```bash
+docker compose ps
+docker compose logs -f api
+docker compose logs -f postgres
+docker compose up -d --build
+docker compose restart api
+```
+
+数据保存在命名卷 `schulte_postgres_data`。备份示例：
+
+```bash
+docker exec schulte-postgres pg_dump -U schulte -d schulte -Fc > schulte-$(date +%F).dump
+```
+
+## 生产链路
+
+```text
+浏览器 → game.introl.me → Vercel Functions → schulte.introl.me
+       → Cloudflare Tunnel → 192.168.1.104:3030 → schulte-api → PostgreSQL
+```
+
+- `schulte.introl.me/healthz` 是公开健康检查。
+- 其他后端 `/api/*` 必须携带 `PROXY_SECRET`，直接访问会返回 401。
+- Vercel 生产环境需要 `BACKEND_ORIGIN` 和 `BACKEND_PROXY_SECRET`。
+- `BACKEND_PROXY_SECRET` 必须与服务器 `.env.backend` 中的 `PROXY_SECRET` 一致。
+- `.env.backend` 包含生产密钥，权限应保持为 `0600`，不可提交到 Git。
+
+数据库迁移位于 `db/001_initial.sql`。迁移脚本可以重复执行，当前语句都使用 `IF NOT EXISTS`。
+
+Vercel 发布：
+
+```bash
+npx vercel pull --yes --environment=production
+npx vercel build --prod
+npx vercel deploy --prebuilt --prod --yes
+```
+
+## API
+
+- `POST /api/users`：使用用户名和四位 PIN 注册用户并自动登录。
+- `GET/POST/DELETE /api/session`：读取当前用户、使用用户名和 PIN 登录、退出。
+- `POST /api/runs/start`：登记正式每日或无限模式运行；拒绝 `replay`。
+- `POST /api/runs/finish`：校验阶段结构并原子写入成绩。
+- `GET /api/leaderboard`：读取每日或无限模式的今日/整体排行榜和动态计时基准。
+- `GET /api/health`：通过 Vercel 检查本机后端与数据库链路。
+
+服务端会校验玩法、规格、每日关卡编号、阶段结构、总用时求和、合理用时范围和运行有效期。由于计时发生在浏览器，无法完全阻止主动篡改客户端的玩家；若未来需要强对抗作弊，应增加可信客户端证明或服务端事件流，而不是仅继续收紧毫秒阈值。
+
+## 关卡生成与测试
+
+```bash
+npm run build
+npm test
+```
+
+`npm run build` 默认从北京时间当天生成 8 天关卡到 `public/data/daily-levels.json`，可用 `LEVEL_START_DATE` 和 `LEVEL_DAYS` 覆盖。布局由日期、规格与 `RULES_VERSION` 确定性生成。
+
+`npm test` 同时检查关卡确定性/质量、API 成绩结构、复战排除和计时颜色优先级。
 
 ## 每日发布
 
-`.github/workflows/daily-pages.yml` 在北京时间每天 00:05 自动执行测试、生成未来关卡并部署到 GitHub Pages。仓库需要在 Settings → Pages 中将 Source 设置为 GitHub Actions。
+GitHub Pages 只能托管静态前端，不能运行同源代理和用户系统。完整产品应部署到 Vercel，并保持本机 Compose 与 Cloudflare Tunnel 在线。
 
-### Vercel
-
-仓库可以直接导入 Vercel。`vercel.json` 已配置：
-
-- Install Command：`npm ci`
-- Build Command：`npm run build`
-- Output Directory：`public`
-- `sw.js` 和 `daily-levels.json` 强制重新验证缓存
-
-Vercel 连接 Git 仓库后，代码推送会自动部署。为了每天重新生成关卡，还需要：
-
-1. 在 Vercel 项目 Settings → Git → Deploy Hooks 中创建一个指向生产分支的 Deploy Hook。
-2. 在 GitHub 仓库 Settings → Secrets and variables → Actions 中新增 Repository secret：`VERCEL_DEPLOY_HOOK_URL`。
-3. 将 Deploy Hook URL 保存为该 secret 的值。
-4. `.github/workflows/daily-vercel.yml` 会在北京时间每天 00:05 调用该 Hook，也支持在 Actions 页面手动触发。
-
-应用本身没有账号、数据库或成绩接口；`server.js` 仅用于本地或容器内提供静态文件。
+`.github/workflows/daily-vercel.yml` 可在北京时间每天 00:05 调用 Vercel Deploy Hook，重新生成未来关卡。Vercel 项目需要配置 `VERCEL_DEPLOY_HOOK_URL` 对应的 GitHub Repository Secret。

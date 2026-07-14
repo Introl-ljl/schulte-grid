@@ -1,6 +1,6 @@
 const TIME_ZONE = 'Asia/Shanghai';
 const STORAGE_KEY = 'schulte-daily-v1';
-const UPDATE_LOG_KEY = 'schulte-update-ready-start-v1';
+const UPDATE_LOG_KEY = 'schulte-update-user-login-v4';
 const INFINITE_MODES = {
   easy: { label: '简单模式' },
   classic: { label: '经典模式' },
@@ -31,7 +31,14 @@ const app = {
   audio: null,
   storageAvailable: true,
   confirmAction: null,
-  guideStartsGame: false
+  guideStartsGame: false,
+  currentUser: null,
+  apiAvailable: true,
+  pendingStartMode: null,
+  dailyLeaderboard: null,
+  leaderboardMode: 'daily',
+  leaderboardSize: 3,
+  leaderboardTimeframe: 'today'
 };
 
 const $ = (id) => document.getElementById(id);
@@ -42,12 +49,128 @@ async function initialize() {
   bindEvents();
   applySettings();
   detectStorageAvailability();
+  await loadAccount();
   await loadLevels();
+  await refreshDailyLeaderboard();
   renderHome();
-  showUpdateLogOnce();
+  if (app.currentUser) showUpdateLogOnce();
+  else showUser();
   checkDateChange();
   window.setInterval(checkDateChange, 30000);
+  window.setInterval(refreshDynamicRankings, 60000);
   registerServiceWorker();
+}
+
+async function loadAccount() {
+  try {
+    const payload = await SchulteApi.session();
+    app.apiAvailable = true;
+    app.currentUser = payload.user || null;
+    app.data = loadData(app.currentUser?.id || null);
+    app.active = app.data.active || null;
+    applySettings();
+  } catch (error) {
+    app.apiAvailable = false;
+    app.currentUser = null;
+    $('loadMessage').textContent = `排行榜服务暂不可用：${error.message}`;
+  }
+  renderUser();
+}
+
+function showUser() {
+  renderUser();
+  openModal('userModal');
+}
+
+function renderUser() {
+  $('userLabel').textContent = app.currentUser?.username || (app.apiAvailable ? '登录' : '登录不可用');
+  $('userButton').classList.toggle('signed-in', Boolean(app.currentUser));
+  $('signedInPanel').classList.toggle('hidden', !app.currentUser);
+  $('userForms').classList.toggle('hidden', Boolean(app.currentUser));
+  $('userModalClose').classList.toggle('hidden', !app.currentUser);
+  if (app.currentUser) $('signedInUsername').textContent = app.currentUser.username;
+  $('userMessage').textContent = app.apiAvailable ? '' : '登录服务暂不可用，请稍后重试。';
+  if (!app.currentUser) showLoginPanel();
+}
+
+function showLoginPanel() {
+  $('loginPanel').classList.remove('hidden');
+  $('registerPanel').classList.add('hidden');
+  $('userTitle').textContent = '登录每日方格';
+}
+
+function showRegisterPanel() {
+  $('loginPanel').classList.add('hidden');
+  $('registerPanel').classList.remove('hidden');
+  $('userTitle').textContent = '注册新用户';
+}
+
+async function loginUser(event) {
+  event.preventDefault();
+  const username = $('loginUsername').value;
+  const pin = $('loginPin').value;
+  await runUserAction(event.submitter, async () => {
+    const payload = await SchulteApi.login(username, pin);
+    await acceptUser(payload.user);
+  });
+}
+
+async function registerUser(event) {
+  event.preventDefault();
+  const username = $('registerUsername').value;
+  const pin = $('registerPin').value;
+  await runUserAction(event.submitter, async () => {
+    const payload = await SchulteApi.register(username, pin);
+    await acceptUser(payload.user);
+  });
+}
+
+async function runUserAction(button, action) {
+  button.disabled = true;
+  $('userMessage').textContent = '正在验证…';
+  try {
+    await action();
+    $('userMessage').textContent = '';
+  } catch (error) {
+    $('userMessage').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function acceptUser(user) {
+  app.currentUser = user;
+  app.data = loadData(user.id);
+  app.active = app.data.active || null;
+  $('loginUsername').value = '';
+  $('loginPin').value = '';
+  $('registerUsername').value = '';
+  $('registerPin').value = '';
+  renderUser();
+  applySettings();
+  closeModal('userModal');
+  await refreshDailyLeaderboard();
+  renderHome();
+  app.pendingStartMode = null;
+  showUpdateLogOnce();
+}
+
+async function logoutUser() {
+  try {
+    await SchulteApi.logout();
+  } catch (error) {
+    $('userMessage').textContent = error.message;
+    return;
+  }
+  app.currentUser = null;
+  app.data = loadData(null);
+  app.active = app.data.active || null;
+  app.dailyLeaderboard = null;
+  renderUser();
+  applySettings();
+  showHome();
+  showUser();
+  toast('已退出登录');
 }
 
 function registerServiceWorker() {
@@ -70,11 +193,12 @@ function bindEvents() {
   });
   $('dailyResumeBtn').addEventListener('click', resumeChallenge);
   $('dailyShareBtn').addEventListener('click', () => shareResult(app.data.records[app.date]));
-  $('guideStartBtn').addEventListener('click', () => {
+  $('dailyReplayBtn').addEventListener('click', requestReplayStart);
+  $('guideStartBtn').addEventListener('click', async () => {
     app.data.seenGuide = true;
     saveData();
     closeModal('guideModal');
-    if (app.guideStartsGame) prepareChallenge();
+    if (app.guideStartsGame) await prepareChallenge();
     app.guideStartsGame = false;
   });
   $('continueBtn').addEventListener('click', advanceStage);
@@ -100,11 +224,34 @@ function bindEvents() {
     app.confirmAction = null;
     if (action) action();
   });
+  $('loginForm').addEventListener('submit', loginUser);
+  $('registerForm').addEventListener('submit', registerUser);
+  $('toRegisterBtn').addEventListener('click', showRegisterPanel);
+  $('toLoginBtn').addEventListener('click', showLoginPanel);
+  $('logoutBtn').addEventListener('click', logoutUser);
+  $('leaderboardModes').addEventListener('click', (event) => {
+    const mode = event.target.closest('[data-board-mode]')?.dataset.boardMode;
+    if (!mode) return;
+    app.leaderboardMode = mode;
+    if (mode === 'fifty') app.leaderboardSize = 5;
+    renderLeaderboardControls();
+    loadLeaderboard();
+  });
+  $('leaderboardSize').addEventListener('change', (event) => {
+    app.leaderboardSize = Number(event.target.value);
+    loadLeaderboard();
+  });
+  $('leaderboardTimeframe').addEventListener('change', (event) => {
+    app.leaderboardTimeframe = event.target.value;
+    loadLeaderboard();
+  });
 
   document.addEventListener('click', (event) => {
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'home') showHome();
     if (action === 'history') showHistory();
+    if (action === 'user') showUser();
+    if (action === 'leaderboard') showLeaderboard();
     if (action === 'settings') showSettings();
     if (action === 'guide') showGuide();
     const closeTarget = event.target.closest('[data-close]')?.dataset.close;
@@ -132,6 +279,7 @@ function bindEvents() {
   window.addEventListener('pagehide', persistActive);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) persistActive();
+    else refreshDynamicRankings();
   });
 }
 
@@ -147,24 +295,7 @@ async function loadLevels() {
       return;
     }
     const saved = app.data.active;
-    const savedMode = saved?.mode || 'daily';
-    const savedLevel = savedMode === 'daily' ? app.level : saved?.level;
-    if (
-      saved &&
-      savedMode === 'daily' &&
-      savedLevel &&
-      saved.date === app.date &&
-      saved.levelId === savedLevel.id &&
-      saved.rulesVersion === savedLevel.rulesVersion &&
-      saved.stageIndex < savedLevel.stages.length &&
-      !saved.finished
-    ) {
-      app.active = saved;
-      if (savedMode === 'daily') claimDailyAttempt(saved.createdAt);
-    } else if (saved) {
-      app.data.active = null;
-      saveData();
-    }
+    if (saved && saved.mode === 'daily' && saved.date === app.date && !saved.finished) app.active = saved;
   } catch (error) {
     $('loadMessage').textContent = `关卡数据加载失败：${error.message}`;
     $('startBtn').disabled = true;
@@ -173,16 +304,17 @@ async function loadLevels() {
 
 function requestDailyStart() {
   if (!app.level) return;
-  if (isDailyActive()) {
-    resumeChallenge();
-    return;
-  }
   if (hasUsedDailyAttempt()) {
-    toast('今日挑战机会已使用，请明天再来');
+    toast(playedDailyToday() ? '今日挑战已完成，可复战或明天再来' : '今日正式挑战机会已经使用，请明天再来');
     renderHome();
     return;
   }
   requestStart('daily');
+}
+
+function requestReplayStart() {
+  if (!app.level || !playedDailyToday()) return;
+  requestStart('replay');
 }
 
 function requestInfiniteStart() {
@@ -191,13 +323,18 @@ function requestInfiniteStart() {
 
 function requestStart(mode) {
   if (!app.level) return;
-  if (app.active && !app.active.finished) {
+  if (mode !== 'replay' && !app.currentUser) {
+    app.pendingStartMode = mode;
+    showUser();
+    toast(app.apiAvailable ? '请先登录或注册用户' : '登录服务暂时不可用');
+    return;
+  }
+  if (app.active && !app.active.finished && app.active.mode !== 'daily') {
     if (app.active.mode === mode) {
       resumeChallenge();
       return;
     }
-    const dailyWarning = app.active.mode === 'daily' ? '放弃后，今天不能再次开始每日挑战。' : '当前无限模式进度将被清空。';
-    showConfirm('切换到其他模式？', dailyWarning, '确认切换', () => {
+    showConfirm('切换到其他玩法？', '当前进度将被清空，确认切换到其他玩法？', '确认切换', () => {
       app.active = null;
       app.data.active = null;
       saveData();
@@ -215,10 +352,10 @@ function requestStart(mode) {
   prepareChallenge();
 }
 
-function prepareChallenge() {
+async function prepareChallenge() {
   if (app.activeMode === 'daily') {
     if (hasUsedDailyAttempt()) {
-      toast('今日挑战机会已使用，请明天再来');
+      toast(playedDailyToday() ? '今日挑战已完成，可复战或明天再来' : '今日正式挑战机会已经使用，请明天再来');
       showHome();
       return;
     }
@@ -246,6 +383,7 @@ function createActiveChallenge() {
     stageResults: [],
     currentErrors: 0,
     finished: false,
+    serverRunId: null,
     createdAt: new Date().toISOString()
   };
 }
@@ -269,8 +407,41 @@ function resumeChallenge() {
   else stopTimer();
 }
 
-function startPreparedChallenge() {
+async function startPreparedChallenge() {
   if (!isAwaitingInitialStart()) return;
+  const isCompetitive = app.active.mode !== 'replay';
+  if (isCompetitive && !app.currentUser) {
+    app.pendingStartMode = app.active.mode;
+    showUser();
+    return;
+  }
+  if (isCompetitive && !app.active.serverRunId) {
+    const button = $('gameStartBtn');
+    button.disabled = true;
+    button.textContent = '正在登记正式成绩…';
+    try {
+      const level = activeLevel();
+      const response = await SchulteApi.startRun({
+        mode: app.active.mode,
+        gridSize: app.active.mode === 'fifty' ? 5 : level.stages[0]?.size,
+        levelId: app.active.levelId,
+        rulesVersion: app.active.rulesVersion
+      });
+      app.active.serverRunId = response.runId;
+      app.active.date = response.date;
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = '开始游戏';
+      toast(error.message);
+      if (error.code === 'AUTH_REQUIRED') {
+        app.currentUser = null;
+        renderUser();
+        showUser();
+      }
+      if (error.code === 'STALE_DAILY_LEVEL') $('dateNotice').classList.remove('hidden');
+      return;
+    }
+  }
   if (app.active.mode === 'daily') {
     const savedAttempt = app.data.active?.createdAt === app.active.createdAt;
     if (hasUsedDailyAttempt() && !savedAttempt) {
@@ -317,7 +488,7 @@ function renderGame() {
   $('maxLabel').textContent = end;
   $('errorLabel').textContent = `错误 ${totalErrors()}`;
   $('gameModeBadge').textContent = modeLabel(app.active.mode);
-  $('abandonBtn').textContent = app.active.mode === 'daily' ? '放弃今日挑战' : '退出无限模式';
+  $('abandonBtn').textContent = app.active.mode === 'daily' ? '放弃今日挑战' : app.active.mode === 'replay' ? '退出复战' : '退出无限模式';
   $('resetBtn').classList.toggle('hidden', app.active.mode === 'daily');
   const awaitingStart = isAwaitingInitialStart();
   $('gameBoard').classList.toggle('ready', awaitingStart);
@@ -434,7 +605,7 @@ function advanceStage() {
   startTimer();
 }
 
-function finishChallenge() {
+async function finishChallenge() {
   app.active.finished = true;
   const result = buildResult();
   const firstResult = saveFirstResult(result);
@@ -445,6 +616,7 @@ function finishChallenge() {
   feedback('finish');
   renderResult(result, firstResult, newBest);
   showView('resultView');
+  if (result.mode !== 'replay') await submitCompetitiveResult(result, firstResult, newBest);
 }
 
 function buildResult() {
@@ -462,17 +634,18 @@ function buildResult() {
 
 function renderResult(result, savedAsFirst, newBest = false) {
   const isDaily = result.mode === 'daily';
+  const isReplay = result.mode === 'replay';
   const infiniteLabel = INFINITE_MODES[result.mode]?.label || '无限模式';
-  $('resultEyebrow').textContent = isDaily ? 'DAILY COMPLETE' : 'INFINITE COMPLETE';
-  $('resultTitle').textContent = isDaily ? '今日挑战完成' : `${infiniteLabel}完成`;
+  $('resultEyebrow').textContent = isDaily ? 'DAILY COMPLETE' : isReplay ? 'REPLAY COMPLETE' : 'INFINITE COMPLETE';
+  $('resultTitle').textContent = isDaily ? '今日挑战完成' : isReplay ? '复战完成' : `${infiniteLabel}完成`;
   const tier = recordTier(result);
   const totalEl = $('resultTotal').parentElement;
-  totalEl.classList.remove('tier-fastest', 'tier-normal', 'tier-slower');
+  totalEl.classList.remove('tier-fastest', 'tier-today-fastest', 'tier-overall-fastest', 'tier-normal', 'tier-slower');
   totalEl.classList.add(`tier-${tier}`);
   $('resultTotal').textContent = formatDuration(result.totalMs);
   $('resultErrors').textContent = `${result.totalErrors} 次`;
-  $('resultStreakLabel').textContent = isDaily ? '连续完成' : '游玩限制';
-  $('resultStreak').textContent = isDaily ? `${calculateStreak()} 天` : '不限次数';
+  $('resultStreakLabel').textContent = isDaily ? '连续完成' : isReplay ? '复战模式' : '游玩限制';
+  $('resultStreak').textContent = isDaily ? `${calculateStreak()} 天` : isReplay ? '随机布局' : '不限次数';
   const stagesEl = $('resultStages');
   if (result.stages.length > 1) {
     stagesEl.classList.remove('hidden');
@@ -481,14 +654,57 @@ function renderResult(result, savedAsFirst, newBest = false) {
     stagesEl.classList.add('hidden');
     stagesEl.innerHTML = '';
   }
-  $('resultCompareLabel').textContent = isDaily ? '近期对比' : '最快记录';
-  $('resultCompare').textContent = isDaily ? comparisonLabel(result) : formatDuration(bestResultFor(result)?.totalMs || result.totalMs);
-  $('resultNote').textContent = savedAsFirst
-    ? '这是今天唯一一次每日挑战成绩，已保存在当前浏览器。'
-    : newBest
-      ? `新纪录！这是${infiniteResultName(result)}目前最快的成绩。`
-      : `本次不会计入每日挑战记录，${infiniteResultName(result)}最快为 ${formatDuration(bestResultFor(result)?.totalMs || result.totalMs)}。`;
+  if (isReplay) {
+    $('resultCompareLabel').textContent = '复战说明';
+    $('resultCompare').textContent = '随机布局 · 可多次挑战';
+  } else {
+    $('resultCompareLabel').textContent = result.globalRank ? (result.globalRankIsBest ? '用户最佳排名' : '全局排名') : isDaily ? '近期对比' : '本地最快';
+    $('resultCompare').textContent = result.globalRank ? `第 ${result.globalRank} 名` : isDaily ? comparisonLabel(result) : formatDuration(bestResultFor(result)?.totalMs || result.totalMs);
+  }
+  $('resultNote').textContent = isDaily
+    ? (savedAsFirst
+        ? (result.syncError ? `本地成绩已保存，但未进入全局榜：${result.syncError}` : result.globalRank ? `正式成绩已进入今日全局榜，目前排名第 ${result.globalRank}。` : '成绩已保存，正在同步到今日全局榜。')
+        : `本次不会计入每日挑战记录，${infiniteResultName(result)}最快为 ${formatDuration(bestResultFor(result)?.totalMs || result.totalMs)}。`)
+    : isReplay
+      ? '复战使用随机布局，成绩不计入每日记录，可在完成每日挑战后反复游玩。'
+      : result.syncError
+        ? `本地成绩已保存，但未进入全局榜：${result.syncError}`
+        : result.globalRank
+          ? `成绩已进入${infiniteResultName(result)}今日全局榜，目前排名第 ${result.globalRank}。`
+          : newBest
+            ? `本地新纪录！正在同步${infiniteResultName(result)}全局榜。`
+            : `成绩正在同步，当前本地最快为 ${formatDuration(bestResultFor(result)?.totalMs || result.totalMs)}。`;
   updateHudStars(activeLevel().stages.length, activeLevel().stages.length);
+}
+
+async function submitCompetitiveResult(result, savedAsFirst, newBest) {
+  if (!app.active?.serverRunId) {
+    result.syncError = '缺少正式运行编号';
+    renderResult(result, savedAsFirst, newBest);
+    return;
+  }
+  try {
+    const response = await SchulteApi.finishRun({
+      runId: app.active.serverRunId,
+      totalMs: result.totalMs,
+      totalErrors: result.totalErrors,
+      stages: result.stages
+    });
+    if (response.ranking) {
+      result.globalRank = response.ranking.rank;
+      result.globalRankIsBest = result.mode !== 'daily';
+      result.globalTiers = {
+        total: response.ranking.totalTier,
+        stages: response.ranking.stageTiers
+      };
+    }
+    if (result.mode === 'daily') app.dailyLeaderboard = response.leaderboard;
+    renderResult(result, savedAsFirst, newBest);
+    if (result.mode === 'daily') renderHomeDynamicRanking();
+  } catch (error) {
+    result.syncError = error.message;
+    renderResult(result, savedAsFirst, newBest);
+  }
 }
 
 function comparisonLabel(result) {
@@ -501,38 +717,32 @@ function comparisonLabel(result) {
 }
 
 function recordTier(result) {
-  const baseline = recordBaseline(result);
-  if (baseline == null) return 'fastest';
-  const delta = result.totalMs - baseline;
-  if (delta <= 0) return 'fastest';
-  return delta / Math.max(1, baseline) > 0.1 ? 'slower' : 'normal';
-}
-
-function recordBaseline(result) {
+  if (result.mode === 'replay') return 'normal';
+  if (result.globalTiers?.total) return result.globalTiers.total;
   if (result.mode === 'daily') {
-    const recent = sortedRecords().filter((record) => record.date < result.date).slice(0, 7);
-    return recent.length ? Math.min(...recent.map((record) => record.totalMs)) : null;
+    const entry = currentDailyEntry();
+    if (entry && entry.totalMs === result.totalMs) return entry.tier;
+    return tierFromBenchmark(result.totalMs, app.dailyLeaderboard?.benchmarks?.total);
   }
-  const best = bestResultFor(result);
-  return best ? best.totalMs : null;
+  return 'normal';
 }
 
 function stageTier(record, index) {
-  const samples = sortedRecords()
-    .filter((item) => item.date < record.date && item.stages?.[index])
-    .map((item) => item.stages[index].durationMs);
-  if (!samples.length) return 'fastest';
-  const average = samples.reduce((sum, value) => sum + value, 0) / samples.length;
-  const delta = record.stages[index].durationMs - average;
-  if (delta <= 0) return 'fastest';
-  return delta / Math.max(1, average) > 0.1 ? 'slower' : 'normal';
+  if (record.mode === 'replay') return 'normal';
+  if (record.globalTiers?.stages?.[index]) return record.globalTiers.stages[index];
+  if (record.mode === 'daily') {
+    const entry = currentDailyEntry();
+    if (entry?.stages?.[index]?.durationMs === record.stages[index].durationMs) return entry.stages[index].tier;
+    return tierFromBenchmark(record.stages[index].durationMs, app.dailyLeaderboard?.benchmarks?.stages?.[index]);
+  }
+  return 'normal';
 }
 
 function renderDailyLap(record) {
   const board = $('lapBoard');
   const total = $('lapTotal');
   const sectors = $('lapSectors').children;
-  board.classList.remove('has-time', 'tier-fastest', 'tier-normal', 'tier-slower');
+  board.classList.remove('has-time', 'tier-fastest', 'tier-today-fastest', 'tier-overall-fastest', 'tier-normal', 'tier-slower');
   if (!record) {
     total.textContent = '--:--.---';
     for (const sector of sectors) sector.querySelector('b').textContent = '--:--.---';
@@ -544,7 +754,7 @@ function renderDailyLap(record) {
     const sector = sectors[index];
     if (!sector) return;
     sector.querySelector('b').textContent = formatDuration(stage.durationMs);
-    sector.classList.remove('tier-fastest', 'tier-normal', 'tier-slower');
+    sector.classList.remove('tier-fastest', 'tier-today-fastest', 'tier-overall-fastest', 'tier-normal', 'tier-slower');
     sector.classList.add(`tier-${stageTier(record, index)}`);
   });
 }
@@ -597,7 +807,7 @@ function renderHome() {
   const dailyTier = $('dailyTier');
   if (todayRecord) {
     const tier = recordTier(todayRecord);
-    dailyTier.textContent = tier === 'fastest' ? '最快 · FASTEST' : tier === 'normal' ? '正常 · SOLID' : '偏慢 · OFF PACE';
+    dailyTier.textContent = tierLabel(tier);
     dailyTier.className = `status-tag tier-tag tier-${tier}`;
   } else {
     dailyTier.className = 'status-tag tier-tag hidden';
@@ -610,6 +820,7 @@ function renderHome() {
   renderModeButtons();
   $('dailyResumeBtn').classList.toggle('hidden', !dailyActive);
   $('dailyShareBtn').classList.toggle('hidden', !todayRecord);
+  $('dailyReplayBtn').classList.toggle('hidden', !todayRecord);
   const streak = calculateStreak();
   $('streakValue').textContent = streak;
   $('streakHint').textContent = streak ? (todayRecord ? '今天也完成了' : '完成今天以延续记录') : '完成今日挑战开始记录';
@@ -667,7 +878,7 @@ function saveFirstResult(result) {
 }
 
 function saveBestResult(result) {
-  if (result.mode === 'daily') return false;
+  if (result.mode === 'daily' || result.mode === 'replay') return false;
   const key = bestRecordKey(result);
   const previous = app.data.bestRecords[key];
   if (previous && previous.totalMs <= result.totalMs) return false;
@@ -719,7 +930,27 @@ function activeLevel() {
 function levelForMode(mode) {
   if (mode === 'easy' || mode === 'classic') return createSingleStageLevel(mode, app.selectedSize);
   if (mode === 'fifty') return createFiftyLevel();
+  if (mode === 'replay') return createReplayLevel();
   return app.level;
+}
+
+function createReplayLevel() {
+  const classicStage = (size) => ({ type: 'classic', size, layout: randomShuffle(Array.from({ length: size * size }, (_, index) => index + 1)) });
+  return {
+    id: `${app.level.id}-replay-${createRunId()}`,
+    rulesVersion: app.level.rulesVersion,
+    stages: [
+      classicStage(3),
+      classicStage(4),
+      classicStage(5),
+      {
+        type: 'fifty',
+        size: 5,
+        layout: randomShuffle(Array.from({ length: 25 }, (_, index) => index + 1)),
+        hiddenLayout: randomShuffle(Array.from({ length: 25 }, (_, index) => index + 26))
+      }
+    ]
+  };
 }
 
 function createSingleStageLevel(mode, size) {
@@ -759,6 +990,7 @@ function createRunId() {
 
 function modeLabel(mode = 'daily') {
   if (mode === 'daily') return '今日挑战';
+  if (mode === 'replay') return '每日复战';
   return `无限 · ${INFINITE_MODES[mode]?.label || '自由玩法'}`;
 }
 
@@ -772,6 +1004,155 @@ function showHistory() {
     ? records.map((record) => `<div class="history-row"><span>${formatChineseDate(record.date)}</span><strong>${formatDuration(record.totalMs)}</strong><small>错误 ${record.totalErrors}</small></div>`).join('')
     : '<div class="empty-state">完成第一次每日挑战后，记录会出现在这里。</div>';
   openModal('historyModal');
+}
+
+function showLeaderboard() {
+  renderLeaderboardControls();
+  openModal('leaderboardModal');
+  loadLeaderboard();
+}
+
+function renderLeaderboardControls() {
+  for (const button of document.querySelectorAll('[data-board-mode]')) {
+    button.classList.toggle('active', button.dataset.boardMode === app.leaderboardMode);
+  }
+  const daily = app.leaderboardMode === 'daily';
+  const fifty = app.leaderboardMode === 'fifty';
+  $('leaderboardSize').value = String(fifty ? 5 : app.leaderboardSize);
+  $('leaderboardSize').disabled = daily || fifty;
+  $('leaderboardTimeframe').value = daily ? 'today' : app.leaderboardTimeframe;
+  $('leaderboardTimeframe').disabled = daily;
+}
+
+async function loadLeaderboard() {
+  if (!app.apiAvailable) {
+    $('leaderboardList').innerHTML = '<div class="empty-state">排行榜服务暂不可用。</div>';
+    return;
+  }
+  $('leaderboardList').innerHTML = '<div class="empty-state">正在加载排行榜…</div>';
+  try {
+    const board = await SchulteApi.leaderboard({
+      mode: app.leaderboardMode,
+      size: app.leaderboardMode === 'daily' ? null : app.leaderboardMode === 'fifty' ? 5 : app.leaderboardSize,
+      timeframe: app.leaderboardMode === 'daily' ? 'today' : app.leaderboardTimeframe
+    });
+    if (board.mode === 'daily') app.dailyLeaderboard = board;
+    renderLeaderboard(board);
+    if (board.mode === 'daily') renderHomeDynamicRanking();
+  } catch (error) {
+    $('leaderboardList').innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderLeaderboard(board) {
+  const total = board.benchmarks?.total || {};
+  $('leaderboardSummary').innerHTML = `
+    <span>今日最快 <b>${total.todayFastestMs == null ? '—' : formatDuration(total.todayFastestMs)}</b></span>
+    <span>整体最速 <b>${total.overallFastestMs == null ? '—' : formatDuration(total.overallFastestMs)}</b></span>
+    <span>参与用户 <b>${board.participantCount ?? board.entries.length}</b></span>`;
+  if (!board.entries.length) {
+    $('leaderboardList').innerHTML = '<div class="empty-state">还没有正式成绩，等你成为第一个。</div>';
+    return;
+  }
+  $('leaderboardList').innerHTML = board.entries.map((entry) => `
+    <div class="leaderboard-row tier-${entry.tier}${entry.isMe ? ' is-me' : ''}">
+      <b class="leaderboard-rank">${entry.rank <= 3 ? ['🥇', '🥈', '🥉'][entry.rank - 1] : `#${entry.rank}`}</b>
+      <span><strong>${escapeHtml(entry.username)}</strong><small>${entry.isMe ? '当前用户 · ' : ''}错误 ${entry.totalErrors}</small></span>
+      <time>${formatDuration(entry.totalMs)}</time>
+    </div>`).join('');
+}
+
+async function refreshDailyLeaderboard() {
+  if (!app.apiAvailable) return;
+  try {
+    app.dailyLeaderboard = await SchulteApi.leaderboard({ mode: 'daily', timeframe: 'today' });
+    syncDailyStateFromServer();
+    renderHomeDynamicRanking();
+  } catch (error) {
+    console.warn('每日排行榜刷新失败', error);
+  }
+}
+
+function syncDailyStateFromServer() {
+  const status = app.dailyLeaderboard?.dailyStatus;
+  if (status?.attempted) {
+    app.data.dailyAttempts[app.date] ||= { startedAt: status.startedAt || new Date().toISOString() };
+  }
+  const entry = currentDailyEntry();
+  if (entry && !app.data.records[app.date]) {
+    app.data.records[app.date] = {
+      date: app.date,
+      levelId: app.level?.id || app.date.replaceAll('-', ''),
+      mode: 'daily',
+      totalMs: entry.totalMs,
+      totalErrors: entry.totalErrors,
+      stages: entry.stages.map(({ tier, ...stage }) => stage),
+      completedAt: entry.completedAt
+    };
+    trimRecords();
+  }
+  if (status?.attempted || entry) saveData();
+}
+
+async function refreshDynamicRankings() {
+  if (document.hidden || !app.apiAvailable) return;
+  await refreshDailyLeaderboard();
+  if (!$('leaderboardModal').classList.contains('hidden')) await loadLeaderboard();
+  const result = app.active?.result;
+  if (result && result.mode !== 'replay') await refreshResultRanking(result);
+}
+
+async function refreshResultRanking(result) {
+  try {
+    const board = result.mode === 'daily'
+      ? app.dailyLeaderboard
+      : await SchulteApi.leaderboard({ mode: result.mode, size: result.mode === 'fifty' ? 5 : result.stages[0].size, timeframe: 'today' });
+    if (!board) return;
+    result.globalTiers = {
+      total: tierFromBenchmark(result.totalMs, board.benchmarks.total),
+      stages: result.stages.map((stage, index) => tierFromBenchmark(stage.durationMs, board.benchmarks.stages[index]))
+    };
+    const me = board.entries.find((entry) => entry.isMe);
+    if (me) {
+      result.globalRank = me.rank;
+      result.globalRankIsBest = result.mode !== 'daily';
+    }
+    renderResult(result, result.mode === 'daily', false);
+  } catch (error) {
+    console.warn('成绩颜色刷新失败', error);
+  }
+}
+
+function currentDailyEntry() {
+  return app.dailyLeaderboard?.entries?.find((entry) => entry.isMe) || null;
+}
+
+function tierFromBenchmark(value, benchmark) {
+  if (!benchmark) return 'normal';
+  if (benchmark.overallFastestMs != null && value <= benchmark.overallFastestMs) return 'overall-fastest';
+  if (benchmark.todayFastestMs != null && value <= benchmark.todayFastestMs) return 'today-fastest';
+  if (benchmark.todayMedianMs != null && value > benchmark.todayMedianMs * 1.1) return 'slower';
+  return 'normal';
+}
+
+function tierLabel(tier) {
+  if (tier === 'overall-fastest') return '整体最速 · RECORD';
+  if (tier === 'today-fastest' || tier === 'fastest') return '今日最快 · FASTEST';
+  if (tier === 'slower') return '偏慢 · OFF PACE';
+  return '正常 · SOLID';
+}
+
+function renderHomeDynamicRanking() {
+  if (!$('homeView').classList.contains('hidden')) {
+    renderHome();
+    return;
+  }
+  const record = app.data.records[app.date];
+  if (!record) return;
+  const tier = recordTier(record);
+  $('dailyTier').textContent = tierLabel(tier);
+  $('dailyTier').className = `status-tag tier-tag tier-${tier}`;
+  renderDailyLap(record);
 }
 
 function showSettings() {
@@ -805,14 +1186,14 @@ function confirmAbandon() {
 }
 
 function confirmClearData() {
-  showConfirm('清除全部本地记录？', '过往成绩、连续天数、今天的挑战状态、未完成进度和偏好设置都会被删除。清除后可以重新开始今日挑战，此操作无法撤销。', '确认清除', () => {
+  showConfirm('清除当前用户的本地记录？', '本地历史、连续天数、未完成进度和偏好设置都会被删除。服务器上的用户、今日挑战机会和排行榜成绩不会被删除。', '确认清除', () => {
     app.data = defaultData();
     app.active = null;
     saveData();
     applySettings();
     closeModal('settingsModal');
     renderHome();
-    toast('全部本地记录已清除，可以重新挑战');
+    toast('当前用户的本地记录已清除');
   });
 }
 
@@ -828,19 +1209,24 @@ async function shareResult(resultOverride = null) {
   const result = resultOverride || app.active?.result || app.data.records[app.date];
   if (!result) return;
   const isDaily = result.mode === 'daily';
+  const isReplay = result.mode === 'replay';
   const [, month, day] = result.date.split('-').map(Number);
   const heading = isDaily
     ? `${month}月 ${day} - 每日方格 #${result.levelId}`
-    : `${month}月 ${day} - 每日方格 · ${INFINITE_MODES[result.mode]?.label || '无限模式'}`;
+    : isReplay
+      ? `${month}月 ${day} - 每日方格 · 复战`
+      : `${month}月 ${day} - 每日方格 · ${INFINITE_MODES[result.mode]?.label || '无限模式'}`;
   const lines = ['https://game.introl.me', heading];
   result.stages.forEach((stage, index) => {
     const average = stageAverageMs(result, index);
     const errorText = stage.errors === 0 ? '零错误' : `${stage.errors} 次错误`;
     const shareStageName = stageDisplayName(stage).replace('×', 'x');
-    lines.push(`${shareStageName}: ⭐ ${errorText} ⏱️ ${formatDuration(stage.durationMs)} (平均 ${formatDuration(average)})`);
+    const marker = isReplay ? ' *' : '';
+    const averageText = isReplay ? '' : ` (平均 ${formatDuration(average)})`;
+    lines.push(`${shareStageName}: ⭐ ${errorText} ⏱️ ${formatDuration(stage.durationMs)}${averageText}${marker}`);
   });
   lines.push(`总计: ⏱️ ${formatDuration(result.totalMs)} · 错误 ${result.totalErrors} 次${isDaily ? ` · 连续 ${calculateStreak()} 天` : ''}`);
-  if (!isDaily) {
+  if (!isDaily && !isReplay) {
     const best = bestResultFor(result) || result;
     lines.push(`最快记录 (${infiniteResultName(result)}): 🏆 ${formatDuration(best.totalMs)}`);
   }
@@ -953,9 +1339,9 @@ function showUpdateLogOnce() {
   openModal('updateModal');
 }
 
-function loadData() {
+function loadData(userId = null) {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    const parsed = JSON.parse(localStorage.getItem(dataStorageKey(userId)) || 'null');
     return normalizeData(parsed);
   } catch {
     return defaultData();
@@ -988,11 +1374,15 @@ function defaultData() {
 
 function saveData() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(app.data));
+    localStorage.setItem(dataStorageKey(app.currentUser?.id || null), JSON.stringify(app.data));
     app.storageAvailable = true;
   } catch {
     app.storageAvailable = false;
   }
+}
+
+function dataStorageKey(userId) {
+  return userId ? `${STORAGE_KEY}:user:${userId}` : STORAGE_KEY;
 }
 
 function detectStorageAvailability() {
@@ -1071,6 +1461,7 @@ function openModal(id) {
 }
 
 function closeModal(id) {
+  if (id === 'userModal' && !app.currentUser) return;
   if (id === 'stageModal') window.clearTimeout(app.stageAdvanceTimer);
   const modal = $(id);
   modal.classList.add('hidden');
@@ -1112,6 +1503,12 @@ function formatDuration(milliseconds) {
   const seconds = Math.floor((totalMilliseconds % 60000) / 1000);
   const millisecondsPart = totalMilliseconds % 1000;
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millisecondsPart).padStart(3, '0')}`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+  }[character]));
 }
 
 function updateHudStars(completedStages, totalStages = activeLevel()?.stages.length || app.level?.stages.length || 3) {

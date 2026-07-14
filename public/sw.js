@@ -1,10 +1,11 @@
-const CACHE_NAME = 'schulte-daily-v16';
+const CACHE_NAME = 'schulte-daily-v18';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=16',
-  './app.js?v=16',
-  './theme.js?v=16',
+  './styles.css?v=18',
+  './app.js?v=18',
+  './api.js?v=18',
+  './theme.js?v=18',
   './data/daily-levels.json'
 ];
 
@@ -27,6 +28,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   const mustRevalidate = event.request.mode === 'navigate'
+    || url.pathname.startsWith('/api/')
     || url.pathname.endsWith('/daily-levels.json')
     || url.pathname.endsWith('.js')
     || url.pathname.endsWith('.css');
@@ -35,11 +37,17 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
+          if (url.pathname.startsWith('/api/')) return response;
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
           return response;
         })
-        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
+        .catch(() => {
+          if (url.pathname.startsWith('/api/')) {
+            return Response.json({ error: '排行榜服务当前离线', code: 'API_OFFLINE' }, { status: 503 });
+          }
+          return caches.match(event.request).then((cached) => cached || caches.match('./index.html'));
+        })
     );
     return;
   }

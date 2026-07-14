@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=16" />
+    <link rel="stylesheet" href="styles.css?v=18" />
   </head>
   <body>
     <div id="dateNotice" class="date-notice hidden" role="status">
@@ -24,9 +24,12 @@
           <small id="hudStars" aria-label="阶段进度">☆ ☆ ☆</small>
         </a>
         <nav class="top-actions" aria-label="主要操作">
+          <button id="userButton" class="user-button" data-action="user" aria-label="用户账户" title="用户账户">
+            <span class="user-dot"></span><b id="userLabel">登录</b>
+          </button>
           <button class="icon-button" data-action="guide" aria-label="玩法说明" title="玩法说明">?</button>
           <button class="icon-button menu-button" data-action="settings" aria-label="设置" title="设置">☰</button>
-          <button class="icon-button trophy-button" data-action="history" aria-label="历史记录" title="历史记录">
+          <button class="icon-button trophy-button" data-action="leaderboard" aria-label="全局排行榜" title="全局排行榜">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4ZM7 6H4v1a4 4 0 0 0 4 4M17 6h3v1a4 4 0 0 1-4 4" /></svg>
           </button>
         </nav>
@@ -61,10 +64,11 @@
                 <div class="sector"><span>1-50</span><b>--:--.---</b></div>
               </div>
             </div>
-            <p class="card-description">每日挑战固定为 3×3、4×4、5×5、1-50 四关，正确点击不保留颜色。</p>
+            <p class="card-description">每日挑战固定为 3×3、4×4、5×5、1-50 四关。登录后的首次正式挑战进入今日全局榜。</p>
             <button id="startBtn" class="primary-button">开始今日挑战 <span>→</span></button>
             <button id="dailyResumeBtn" class="secondary-button hidden">继续今日挑战</button>
             <button id="dailyShareBtn" class="secondary-button share-button hidden">分享今日成绩</button>
+            <button id="dailyReplayBtn" class="secondary-button replay-button hidden">复战今日 · 随机布局</button>
           </article>
 
           <article class="challenge-card infinite-card">
@@ -73,7 +77,7 @@
               <span class="status-tag infinite-status">不限次数 · 自由选择玩法</span>
             </div>
             <h2>无限模式</h2>
-            <p class="card-description">下面的玩法选择仅用于无限模式，可反复游玩，不影响每日挑战。</p>
+            <p class="card-description">下面的玩法选择仅用于无限模式，可反复游玩并记录全局最佳，不影响每日挑战。</p>
             <div id="modeButtons" class="mode-buttons" role="group" aria-label="无限模式玩法选择">
               <button type="button" class="mode-button active" data-mode="easy" aria-pressed="true">简单</button>
               <button type="button" class="mode-button" data-mode="classic" aria-pressed="false">经典</button>
@@ -95,7 +99,7 @@
           <button class="stat-card" data-action="history">
             <span>连续完成</span><strong><b id="streakValue">0</b> 天</strong><small id="streakHint">完成今日挑战开始记录</small>
           </button>
-          <button class="stat-card" data-action="history">
+          <button class="stat-card" data-action="leaderboard">
             <span>最近成绩</span><strong id="lastScore">—</strong><small>仅保存在当前浏览器</small>
           </button>
         </div>
@@ -163,7 +167,7 @@
         <ol class="guide-list">
           <li><b>01</b><span><strong>按目标数字依次点击</strong><small>点错不会推进，计时会继续。</small></span></li>
           <li><b>02</b><span><strong>不同模式有不同反馈</strong><small>简单模式持续高亮；经典与每日挑战不留颜色；1-50 会翻出下一层数字。</small></span></li>
-          <li><b>03</b><span><strong>每日一次，无限不限次</strong><small>每日挑战开始后会占用当天机会；无限模式可反复游玩。</small></span></li>
+           <li><b>03</b><span><strong>每日可复战，无限不限次</strong><small>每日挑战完成当天机会后，可用复战反复练习随机布局；无限模式可反复游玩。</small></span></li>
         </ol>
         <div class="theme-slider-card">
           <div><strong>选择方格主题色</strong><small id="guideThemeName">海洋蓝</small></div>
@@ -180,7 +184,67 @@
         <button class="modal-close" data-close="historyModal" aria-label="关闭">×</button>
         <p class="eyebrow">LOCAL HISTORY</p><h2 id="historyTitle">最近 30 天</h2>
         <div id="historyList" class="history-list"></div>
-        <p class="privacy-hint">成绩仅保存在当前设备的当前浏览器中，不会上传至服务器。</p>
+        <p class="privacy-hint">本地历史保存在当前浏览器；正式每日挑战和无限模式成绩会同步到当前用户的全局排行榜。</p>
+      </div>
+    </div>
+
+    <div id="userModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="userModal"></div>
+      <div class="modal-card user-modal" role="dialog" aria-modal="true" aria-labelledby="userTitle">
+        <button id="userModalClose" class="modal-close hidden" data-close="userModal" aria-label="关闭">×</button>
+        <p class="eyebrow">USER LOGIN</p><h2 id="userTitle">登录每日方格</h2>
+        <div id="signedInPanel" class="signed-in-panel hidden">
+          <span>当前用户</span><strong id="signedInUsername">—</strong>
+          <button id="logoutBtn" class="secondary-button">退出登录</button>
+        </div>
+        <div id="userForms">
+          <div id="loginPanel">
+            <form id="loginForm" class="user-form">
+              <label><span>用户名</span><input id="loginUsername" type="text" minlength="2" maxlength="20" autocomplete="username" placeholder="输入用户名" required /></label>
+              <label><span>四位 PIN</span><input id="loginPin" type="password" inputmode="numeric" autocomplete="current-password" pattern="[0-9]{4}" maxlength="4" placeholder="••••" required /></label>
+              <button class="primary-button" type="submit">登录</button>
+            </form>
+            <button type="button" id="toRegisterBtn" class="form-switch">还没有用户？<b>注册</b></button>
+          </div>
+          <div id="registerPanel" class="hidden">
+            <form id="registerForm" class="user-form">
+              <label><span>注册用户名</span><input id="registerUsername" type="text" minlength="2" maxlength="20" autocomplete="username" placeholder="中文、字母、数字、_ 或 -" required /></label>
+              <label><span>设置四位 PIN</span><input id="registerPin" type="password" inputmode="numeric" autocomplete="new-password" pattern="[0-9]{4}" maxlength="4" placeholder="••••" required /></label>
+              <button class="secondary-button" type="submit">注册并登录</button>
+            </form>
+            <button type="button" id="toLoginBtn" class="form-switch">已有账号？<b>登录</b></button>
+          </div>
+        </div>
+        <p id="userMessage" class="inline-message" role="status"></p>
+        <p class="privacy-hint">首次进入必须登录。用户名会显示在排行榜中，PIN 请勿复用银行卡或其他重要密码。</p>
+      </div>
+    </div>
+
+    <div id="leaderboardModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="leaderboardModal"></div>
+      <div class="modal-card leaderboard-modal" role="dialog" aria-modal="true" aria-labelledby="leaderboardTitle">
+        <button class="modal-close" data-close="leaderboardModal" aria-label="关闭">×</button>
+        <p class="eyebrow">GLOBAL LEADERBOARD</p><h2 id="leaderboardTitle">全局排行榜</h2>
+        <div id="leaderboardModes" class="leaderboard-controls" role="group" aria-label="排行榜玩法">
+          <button class="active" data-board-mode="daily">每日</button>
+          <button data-board-mode="easy">简单</button>
+          <button data-board-mode="classic">经典</button>
+          <button data-board-mode="fifty">1-50</button>
+        </div>
+        <div class="leaderboard-filters">
+          <select id="leaderboardSize" aria-label="方格规格">
+            <option value="3">3×3</option><option value="4">4×4</option><option value="5">5×5</option><option value="6">6×6</option>
+          </select>
+          <select id="leaderboardTimeframe" aria-label="排行榜时间范围">
+            <option value="today">今日最快</option><option value="all">整体最速</option>
+          </select>
+        </div>
+        <div class="timing-legend" aria-label="计时颜色说明">
+          <span class="legend-overall">整体最速</span><span class="legend-today">今日全体最快</span><span class="legend-normal">今日正常</span><span class="legend-slower">偏慢</span>
+        </div>
+        <div id="leaderboardSummary" class="leaderboard-summary"></div>
+        <div id="leaderboardList" class="leaderboard-list"><div class="empty-state">正在加载排行榜…</div></div>
+        <p class="privacy-hint">无限模式展示每个用户在所选范围内的最佳成绩；每日复战不会进入任何排行榜。</p>
       </div>
     </div>
 
@@ -209,7 +273,7 @@
           <button id="exportBtn" class="secondary-button">导出本地记录</button>
           <button id="clearBtn" class="secondary-button danger-button">清除本地记录</button>
         </div>
-        <p class="privacy-hint"><strong>隐私说明</strong><br />本产品不收集身份信息或游戏成绩。清除浏览器数据、更换设备或使用无痕模式会导致记录丢失。</p>
+        <p class="privacy-hint"><strong>隐私说明</strong><br />清除操作只删除当前浏览器中的本地历史和偏好，不会删除用户或已经提交的排行榜成绩。</p>
       </div>
     </div>
 
@@ -220,10 +284,10 @@
         <p class="eyebrow">WHAT'S NEW</p>
         <h2 id="updateTitle">本次更新</h2>
         <ul class="update-list">
-          <li><b>01</b><span><strong>全新视觉设计</strong><small>重做卡片、按钮与图标按钮，采用硬阴影与高对比配色，并加入柔和背景光晕。</small></span></li>
-          <li><b>02</b><span><strong>每日挑战圈速面板</strong><small>首页新增圈速板，展示本局总时长与 3×3、4×4、5×5、1-50 四个阶段分段成绩。</small></span></li>
-          <li><b>03</b><span><strong>成绩评级</strong><small>根据用时给出 FASTEST / SOLID / OFF PACE 评级，并在圈速与各阶段标注快慢档位。</small></span></li>
-          <li><b>04</b><span><strong>移动端优化</strong><small>适配安全区域与全面屏，优化触感反馈、动画与结果页撒花庆祝。</small></span></li>
+          <li><b>01</b><span><strong>登录与注册合并</strong><small>登录和注册放在同一窗口，默认显示登录界面。</small></span></li>
+          <li><b>02</b><span><strong>一键切换注册</strong><small>点击下方“注册”即可切到注册窗口，已有账号可随时返回登录。</small></span></li>
+          <li><b>03</b><span><strong>用户名 + 四位 PIN</strong><small>取消公共身份选择，直接用用户名与 PIN 登录，用户名公开显示在排行榜。</small></span></li>
+          <li><b>04</b><span><strong>首次进入需登录</strong><small>未登录时停留在登录窗口，登录或注册成功后才能开始游戏。</small></span></li>
         </ul>
         <button class="primary-button" data-close="updateModal">知道了</button>
       </div>
@@ -238,7 +302,8 @@
     </div>
 
     <div id="toast" class="toast hidden" role="status"></div>
-    <script src="theme.js?v=16"></script>
-    <script src="app.js?v=16"></script>
+    <script src="theme.js?v=18"></script>
+    <script src="api.js?v=18"></script>
+    <script src="app.js?v=18"></script>
   </body>
 </html>

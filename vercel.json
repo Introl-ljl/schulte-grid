@@ -6,6 +6,11 @@
   "outputDirectory": "public",
   "cleanUrls": true,
   "trailingSlash": false,
+  "functions": {
+    "api/**/*.mjs": {
+      "maxDuration": 30
+    }
+  },
   "headers": [
     {
       "source": "/sw.js",

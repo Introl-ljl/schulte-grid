@@ -7,7 +7,13 @@
   "scripts": {
     "generate": "node scripts/generate-levels.js",
     "build": "npm run generate",
-    "test": "node scripts/test-levels.js",
+    "test": "node scripts/test-levels.js && node scripts/test-api.mjs",
+    "db:migrate": "docker compose exec api node backend/migrate.mjs",
+    "backend:start": "node backend/server.mjs",
+    "dev": "npx vercel dev",
     "start": "node server.js"
+  },
+  "dependencies": {
+    "postgres": "^3.4.9"
   }
 }
