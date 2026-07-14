@@ -4,7 +4,8 @@ const UPDATE_LOG_KEY = 'schulte-update-user-login-v4';
 const INFINITE_MODES = {
   easy: { label: '简单模式' },
   classic: { label: '经典模式' },
-  fifty: { label: '1-50 模式' }
+  fifty: { label: '1-50 模式' },
+  disc: { label: '旋转舒尔特' }
 };
 const GRID_THEMES = ['海洋蓝', '薄荷青', '森林绿', '暖阳橙', '葡萄紫', '莓果红'];
 const DEFAULT_SETTINGS = {
@@ -24,6 +25,9 @@ const app = {
   active: null,
   selectedMode: 'easy',
   selectedSize: 3,
+  discDifficulty: 'easy',
+  discGameActive: false,
+  discSimpleMode: true,
   activeMode: 'daily',
   timerFrame: null,
   lastTimerPaint: 0,
@@ -191,6 +195,17 @@ function bindEvents() {
     const size = Number(event.target.closest('[data-size]')?.dataset.size);
     if (size) selectSize(size);
   });
+  $('discDifficultyPicker').addEventListener('click', (event) => {
+    const difficulty = event.target.closest('[data-difficulty]')?.dataset.difficulty;
+    if (difficulty) {
+      app.discDifficulty = difficulty;
+      renderHome();
+    }
+  });
+  $('discSimpleToggle').addEventListener('click', () => {
+    app.discSimpleMode = !app.discSimpleMode;
+    renderHome();
+  });
   $('dailyResumeBtn').addEventListener('click', resumeChallenge);
   $('dailyShareBtn').addEventListener('click', () => shareResult(app.data.records[app.date]));
   $('dailyReplayBtn').addEventListener('click', requestReplayStart);
@@ -318,6 +333,11 @@ function requestReplayStart() {
 }
 
 function requestInfiniteStart() {
+  if (app.selectedMode === 'disc') {
+    showView('gameView');
+    startDiscGame();
+    return;
+  }
   requestStart(app.selectedMode);
 }
 
@@ -843,6 +863,97 @@ function selectMode(mode) {
   renderHome();
 }
 
+function startDiscGame() {
+  if (typeof DiscMode === 'undefined') {
+    toast('圆盘模式加载失败');
+    return;
+  }
+
+  app.discGameActive = true;
+  DiscMode.init(app.discDifficulty);
+  DiscMode.simpleMode = app.discSimpleMode;
+
+  const canvas = $('discCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // 调整 Canvas 尺寸
+  const size = Math.min(window.innerWidth - 40, 600);
+  canvas.width = size;
+  canvas.height = size;
+
+  $('discGameView').classList.remove('hidden');
+  $('gameBoard').classList.add('hidden');
+  $('discTitle').textContent = `旋转舒尔特 · ${DiscMode.levels[app.discDifficulty].name}`;
+
+  // 开始游戏循环
+  let lastTime = performance.now();
+  const gameLoop = (currentTime) => {
+    if (!app.discGameActive) return;
+
+    const deltaTime = (currentTime - lastTime) / 1000;
+    lastTime = currentTime;
+
+    DiscMode.update(deltaTime);
+    DiscMode.render(ctx, canvas);
+
+    // 更新 UI
+    const level = DiscMode.levels[DiscMode.state.difficulty];
+    $('discProgress').textContent = `${DiscMode.state.target - 1} / ${level.total}`;
+    $('discErrors').textContent = `错误 ${DiscMode.state.errors}`;
+    $('discTimer').textContent = formatDuration(DiscMode.state.totalTime);
+
+    requestAnimationFrame(gameLoop);
+  };
+
+  requestAnimationFrame(gameLoop);
+
+  // 点击事件
+  canvas.onclick = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    const clickedNumber = DiscMode.findNumber(x, y, canvas);
+    if (clickedNumber) {
+      const result = DiscMode.click(clickedNumber, x, y);
+
+      if (result.success) {
+        feedback('correct');
+        if (result.complete) {
+          setTimeout(() => finishDiscGame(), 300);
+        }
+      } else {
+        feedback('wrong');
+      }
+    }
+  };
+
+  $('discQuitBtn').onclick = () => {
+    if (confirm('确定要退出圆盘模式吗？')) {
+      quitDiscGame();
+    }
+  };
+}
+
+function finishDiscGame() {
+  app.discGameActive = false;
+  const time = DiscMode.state.totalTime;
+  const errors = DiscMode.state.errors;
+
+  toast(`完成！用时 ${formatDuration(time)}，错误 ${errors} 次`);
+
+  setTimeout(() => {
+    quitDiscGame();
+    showHome();
+  }, 2000);
+}
+
+function quitDiscGame() {
+  app.discGameActive = false;
+  $('discGameView').classList.add('hidden');
+  $('gameBoard').classList.remove('hidden');
+}
+
 function selectSize(size) {
   if (![3, 4, 5, 6].includes(size)) return;
   app.selectedSize = size;
@@ -860,7 +971,19 @@ function renderModeButtons() {
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   }
-  $('sizePicker').classList.toggle('hidden', app.selectedMode === 'fifty');
+  for (const button of document.querySelectorAll('[data-difficulty]')) {
+    const active = button.dataset.difficulty === app.discDifficulty;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  }
+  const discSimpleToggle = $('discSimpleToggle');
+  if (discSimpleToggle) {
+    discSimpleToggle.classList.toggle('active', app.discSimpleMode);
+    discSimpleToggle.textContent = app.discSimpleMode ? '已开启 · 完成后变色' : '已关闭 · 点后无变化';
+  }
+  $('sizePicker').classList.toggle('hidden', app.selectedMode === 'fifty' || app.selectedMode === 'disc');
+  $('discDifficultyPicker').classList.toggle('hidden', app.selectedMode !== 'disc');
+  $('discSimpleToggle').classList.toggle('hidden', app.selectedMode !== 'disc');
 }
 
 function startButtonLabel() {
@@ -871,6 +994,10 @@ function startButtonLabel() {
 }
 
 function infiniteButtonLabel() {
+  if (app.selectedMode === 'disc') {
+    const diffName = DiscMode?.levels?.[app.discDifficulty]?.name || '2环16数';
+    return `开始旋转舒尔特 · ${diffName} <span>→</span>`;
+  }
   const size = app.selectedMode === 'fifty' ? '' : ` ${app.selectedSize}×${app.selectedSize}`;
   return `开始${INFINITE_MODES[app.selectedMode].label}${size} <span>→</span>`;
 }

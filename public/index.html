@@ -82,6 +82,7 @@
               <button type="button" class="mode-button active" data-mode="easy" aria-pressed="true">简单</button>
               <button type="button" class="mode-button" data-mode="classic" aria-pressed="false">经典</button>
               <button type="button" class="mode-button" data-mode="fifty" aria-pressed="false">1-50</button>
+              <button type="button" class="mode-button" data-mode="disc" aria-pressed="false">圆盘</button>
             </div>
             <div id="sizePicker" class="size-picker" role="group" aria-label="方格规格选择">
               <span>方格规格</span>
@@ -90,6 +91,13 @@
               <button type="button" class="size-button" data-size="5" aria-pressed="false">5×5</button>
               <button type="button" class="size-button" data-size="6" aria-pressed="false">6×6</button>
             </div>
+            <div id="discDifficultyPicker" class="disc-difficulty-picker hidden" role="group" aria-label="圆盘难度选择">
+              <span>猎手难度</span>
+              <button type="button" class="disc-diff-button active" data-difficulty="easy" aria-pressed="true">初级</button>
+              <button type="button" class="disc-diff-button" data-difficulty="medium" aria-pressed="false">中级</button>
+              <button type="button" class="disc-diff-button" data-difficulty="hard" aria-pressed="false">高级</button>
+            </div>
+            <button id="discSimpleToggle" class="disc-simple-toggle hidden" type="button">已开启 · 完成后变色</button>
             <button id="infiniteBtn" class="secondary-button">开始简单模式 <span>→</span></button>
           </article>
         </div>
@@ -112,6 +120,21 @@
           <div class="stage-dots" id="stageDots" aria-label="阶段进度"></div>
           <span id="gameModeBadge" class="mode-badge">今日挑战</span>
         </div>
+
+        <section id="discGameView" class="disc-game-container hidden">
+          <div class="disc-header">
+            <h2 id="discTitle">旋转舒尔特 · 2环16数</h2>
+            <div class="disc-stats">
+              <span id="discTimer">00:00.000</span>
+              <span id="discProgress">0 / 16</span>
+              <span id="discErrors">错误 0</span>
+            </div>
+          </div>
+          <canvas id="discCanvas" width="600" height="600"></canvas>
+          <div class="disc-controls">
+            <button id="discQuitBtn" class="disc-quit-button">退出游戏</button>
+          </div>
+        </section>
         <div class="game-heading">
           <div><p id="stageLabel" class="eyebrow">第 1 / 3 阶段</p><h2 id="gridSizeLabel">3×3</h2></div>
           <div class="timer"><span>总计时</span><strong id="timerLabel">00:00.000</strong></div>
@@ -306,6 +329,7 @@
     <div id="toast" class="toast hidden" role="status"></div>
     <script src="theme.js?v=20"></script>
     <script src="api.js?v=20"></script>
+    <script src="disc-mode.js?v=20"></script>
     <script src="app.js?v=20"></script>
   </body>
 </html>
