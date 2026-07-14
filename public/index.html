@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=18" />
+    <link rel="stylesheet" href="styles.css?v=20" />
   </head>
   <body>
     <div id="dateNotice" class="date-notice hidden" role="status">
@@ -145,6 +145,35 @@
           <button id="restartBtn" class="primary-button danger-fill">重新开始</button>
         </div>
       </section>
+
+      <section id="leaderboardView" class="view leaderboard-view hidden" aria-live="polite">
+        <div class="lb-header">
+          <button class="icon-button lb-back" data-action="home" aria-label="返回首页" title="返回首页">←</button>
+          <div class="lb-header-text">
+            <p class="eyebrow">GLOBAL LEADERBOARD</p>
+            <h2>全局排行榜</h2>
+          </div>
+        </div>
+        <div class="lb-toolbar">
+          <div id="leaderboardModes" class="leaderboard-controls" role="group" aria-label="排行榜玩法">
+            <button class="active" data-board-mode="daily">每日</button>
+            <button data-board-mode="easy">简单</button>
+            <button data-board-mode="classic">经典</button>
+            <button data-board-mode="fifty">1-50</button>
+          </div>
+          <div class="leaderboard-filters">
+            <select id="leaderboardSize" aria-label="方格规格">
+              <option value="3">3×3</option><option value="4">4×4</option><option value="5">5×5</option><option value="6">6×6</option>
+            </select>
+            <select id="leaderboardTimeframe" aria-label="排行榜时间范围">
+              <option value="today">今日最快</option><option value="all">整体最速</option>
+            </select>
+          </div>
+        </div>
+        <div id="lbBenchmark" class="lb-benchmark"></div>
+        <div id="leaderboardList" class="leaderboard-list"><div class="empty-state">正在加载排行榜…</div></div>
+        <p class="privacy-hint">无限模式展示每个用户在所选范围内的最佳成绩；每日复战不会进入任何排行榜。</p>
+      </section>
     </main>
 
     <div id="stageModal" class="modal hidden" aria-hidden="true">
@@ -220,33 +249,6 @@
       </div>
     </div>
 
-    <div id="leaderboardModal" class="modal hidden" aria-hidden="true">
-      <div class="modal-backdrop" data-close="leaderboardModal"></div>
-      <div class="modal-card leaderboard-modal" role="dialog" aria-modal="true" aria-labelledby="leaderboardTitle">
-        <button class="modal-close" data-close="leaderboardModal" aria-label="关闭">×</button>
-        <p class="eyebrow">GLOBAL LEADERBOARD</p><h2 id="leaderboardTitle">全局排行榜</h2>
-        <div id="leaderboardModes" class="leaderboard-controls" role="group" aria-label="排行榜玩法">
-          <button class="active" data-board-mode="daily">每日</button>
-          <button data-board-mode="easy">简单</button>
-          <button data-board-mode="classic">经典</button>
-          <button data-board-mode="fifty">1-50</button>
-        </div>
-        <div class="leaderboard-filters">
-          <select id="leaderboardSize" aria-label="方格规格">
-            <option value="3">3×3</option><option value="4">4×4</option><option value="5">5×5</option><option value="6">6×6</option>
-          </select>
-          <select id="leaderboardTimeframe" aria-label="排行榜时间范围">
-            <option value="today">今日最快</option><option value="all">整体最速</option>
-          </select>
-        </div>
-        <div class="timing-legend" aria-label="计时颜色说明">
-          <span class="legend-overall">整体最速</span><span class="legend-today">今日全体最快</span><span class="legend-normal">今日正常</span><span class="legend-slower">偏慢</span>
-        </div>
-        <div id="leaderboardSummary" class="leaderboard-summary"></div>
-        <div id="leaderboardList" class="leaderboard-list"><div class="empty-state">正在加载排行榜…</div></div>
-        <p class="privacy-hint">无限模式展示每个用户在所选范围内的最佳成绩；每日复战不会进入任何排行榜。</p>
-      </div>
-    </div>
 
     <div id="settingsModal" class="modal hidden" aria-hidden="true">
       <div class="modal-backdrop" data-close="settingsModal"></div>
@@ -302,8 +304,8 @@
     </div>
 
     <div id="toast" class="toast hidden" role="status"></div>
-    <script src="theme.js?v=18"></script>
-    <script src="api.js?v=18"></script>
-    <script src="app.js?v=18"></script>
+    <script src="theme.js?v=20"></script>
+    <script src="api.js?v=20"></script>
+    <script src="app.js?v=20"></script>
   </body>
 </html>

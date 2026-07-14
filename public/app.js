@@ -1008,7 +1008,7 @@ function showHistory() {
 
 function showLeaderboard() {
   renderLeaderboardControls();
-  openModal('leaderboardModal');
+  showView('leaderboardView');
   loadLeaderboard();
 }
 
@@ -1044,22 +1044,86 @@ async function loadLeaderboard() {
   }
 }
 
+const DAILY_STAGE_LABELS = ['3×3', '4×4', '5×5', '1-50'];
+
+function benchmarkTierOf(value, benchmark) {
+  if (value == null) return 'normal';
+  if (benchmark?.overallFastestMs != null && value <= benchmark.overallFastestMs) return 'overall-fastest';
+  if (benchmark?.todayFastestMs != null && value <= benchmark.todayFastestMs) return 'today-fastest';
+  return 'normal';
+}
+
 function renderLeaderboard(board) {
-  const total = board.benchmarks?.total || {};
-  $('leaderboardSummary').innerHTML = `
-    <span>今日最快 <b>${total.todayFastestMs == null ? '—' : formatDuration(total.todayFastestMs)}</b></span>
-    <span>整体最速 <b>${total.overallFastestMs == null ? '—' : formatDuration(total.overallFastestMs)}</b></span>
-    <span>参与用户 <b>${board.participantCount ?? board.entries.length}</b></span>`;
+  const benchmarks = board.benchmarks || {};
+  const totalBench = benchmarks.total || {};
+  const stageBenches = benchmarks.stages || [];
+  const isDaily = board.mode === 'daily';
+  const isToday = (board.timeframe || 'today') === 'today';
+  const primaryMs = isToday ? totalBench.todayFastestMs : totalBench.overallFastestMs;
+  const secondaryMs = isToday ? totalBench.overallFastestMs : totalBench.todayFastestMs;
+  const primaryLabel = isToday ? 'TODAY FASTEST · 今日最快' : 'ALL-TIME BEST · 整体最速';
+  const secondaryLabel = isToday ? '整体最速' : '今日最快';
+  const participants = board.participantCount ?? board.entries.length;
+
+  const sectorsHtml = (stages, fallbackLabels) => stages && stages.length > 1
+    ? `<div class="lb-sectors">${stages.map((stage, i) => {
+        const label = fallbackLabels ? (fallbackLabels[i] ?? stageDisplayName(stage)) : escapeHtml(stageDisplayName(stage));
+        return `<div class="sector tier-${stage.tier || 'normal'}"><span>${label}</span><b>${formatDuration(stage.durationMs)}</b></div>`;
+      }).join('')}</div>`
+    : '';
+
+  const benchmarkEl = $('lbBenchmark');
+  if (primaryMs != null) {
+    const benchTier = benchmarkTierOf(primaryMs, totalBench);
+    const benchSectors = isDaily && stageBenches.length
+      ? `<div class="lb-sectors">${stageBenches.map((sb, i) => {
+          const stageVal = isToday ? sb.todayFastestMs : sb.overallFastestMs;
+          const stageTier = benchmarkTierOf(stageVal, sb);
+          const label = DAILY_STAGE_LABELS[i] ?? `#${i + 1}`;
+          return `<div class="sector tier-${stageTier}"><span>${label}</span><b>${stageVal != null ? formatDuration(stageVal) : '--:--.---'}</b></div>`;
+        }).join('')}</div>`
+      : '';
+    benchmarkEl.innerHTML = `
+      <div class="lb-bench tier-${benchTier}">
+        <div class="lb-bench-top">
+          <span class="lb-bench-tag">${primaryLabel}</span>
+          <span class="lb-bench-count">参与 <b>${participants}</b></span>
+        </div>
+        <strong class="lb-bench-time">${formatDuration(primaryMs)}</strong>
+        ${benchSectors}
+        <div class="lb-bench-foot">${secondaryLabel} <b>${secondaryMs != null ? formatDuration(secondaryMs) : '—'}</b></div>
+      </div>`;
+  } else {
+    benchmarkEl.innerHTML = `
+      <div class="lb-bench">
+        <div class="lb-bench-top">
+          <span class="lb-bench-tag">${primaryLabel}</span>
+          <span class="lb-bench-count">参与 <b>${participants}</b></span>
+        </div>
+        <strong class="lb-bench-time">--:--.---</strong>
+      </div>`;
+  }
+
   if (!board.entries.length) {
     $('leaderboardList').innerHTML = '<div class="empty-state">还没有正式成绩，等你成为第一个。</div>';
     return;
   }
-  $('leaderboardList').innerHTML = board.entries.map((entry) => `
-    <div class="leaderboard-row tier-${entry.tier}${entry.isMe ? ' is-me' : ''}">
-      <b class="leaderboard-rank">${entry.rank <= 3 ? ['🥇', '🥈', '🥉'][entry.rank - 1] : `#${entry.rank}`}</b>
-      <span><strong>${escapeHtml(entry.username)}</strong><small>${entry.isMe ? '当前用户 · ' : ''}错误 ${entry.totalErrors}</small></span>
-      <time>${formatDuration(entry.totalMs)}</time>
-    </div>`).join('');
+  $('leaderboardList').innerHTML = board.entries.map((entry) => {
+    const rankBadge = entry.rank <= 3 ? ['🥇', '🥈', '🥉'][entry.rank - 1] : `#${entry.rank}`;
+    const entrySectors = sectorsHtml(entry.stages);
+    return `
+    <article class="lb-row tier-${entry.tier}${entry.isMe ? ' is-me' : ''}">
+      <div class="lb-rank"><b>${rankBadge}</b></div>
+      <div class="lb-body">
+        <div class="lb-line">
+          <strong class="lb-name">${escapeHtml(entry.username)}${entry.isMe ? '<em class="lb-you">你</em>' : ''}</strong>
+          <time class="lb-time tier-${entry.tier}">${formatDuration(entry.totalMs)}</time>
+        </div>
+        ${entrySectors}
+        <div class="lb-meta">错误 ${entry.totalErrors}</div>
+      </div>
+    </article>`;
+  }).join('');
 }
 
 async function refreshDailyLeaderboard() {
@@ -1097,7 +1161,7 @@ function syncDailyStateFromServer() {
 async function refreshDynamicRankings() {
   if (document.hidden || !app.apiAvailable) return;
   await refreshDailyLeaderboard();
-  if (!$('leaderboardModal').classList.contains('hidden')) await loadLeaderboard();
+  if (!$('leaderboardView').classList.contains('hidden')) await loadLeaderboard();
   const result = app.active?.result;
   if (result && result.mode !== 'replay') await refreshResultRanking(result);
 }
