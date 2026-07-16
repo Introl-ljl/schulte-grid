@@ -352,93 +352,6 @@ html.scroll-locked, html.scroll-locked body { overflow: hidden; height: 100%; }
 .sector.tier-slower { border-color: #e0b400; }
 .sector.tier-slower b { color: #c79100; }
 
-/* ---------- Disc Mode (圆盘猎手) ---------- */
-.disc-difficulty-picker {
-  display: grid;
-  grid-template-columns: auto repeat(3, 1fr);
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  margin: 0 auto 14px;
-}
-.disc-difficulty-picker > span { color: var(--muted); font-size: 12px; font-weight: 800; }
-.disc-diff-button {
-  min-height: 36px;
-  padding: 6px 4px;
-  border: 2px solid var(--soft);
-  border-radius: 11px;
-  background: transparent;
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: transform .1s ease, background .12s ease, border-color .12s ease;
-}
-.disc-diff-button:hover { border-color: var(--purple); }
-.disc-diff-button:active { transform: scale(.94); }
-.disc-diff-button.active { border-color: var(--purple); background: var(--purple); color: #fff; box-shadow: 2px 2px 0 var(--line); }
-
-.disc-simple-toggle {
-  width: 100%;
-  min-height: 42px;
-  margin: 8px auto 14px;
-  padding: 8px 16px;
-  border: 2px solid var(--soft);
-  border-radius: 11px;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: transform .1s ease, background .12s ease, border-color .12s ease;
-}
-.disc-simple-toggle:hover { border-color: var(--blue); }
-.disc-simple-toggle:active { transform: scale(.98); }
-.disc-simple-toggle.active { border-color: var(--blue); background: var(--blue); color: #fff; box-shadow: 2px 2px 0 var(--line); }
-
-.disc-controls {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  max-width: 400px;
-  margin-top: 4px;
-}
-
-#discCanvas {
-  border: 3px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-hard);
-  cursor: pointer;
-  touch-action: none;
-}
-
-.game-board.disc .grid,
-.game-board.disc .game-start-panel { display: none; }
-.game-view.disc-active .game-heading .timer { display: flex; }
-
-.disc-quit-button {
-  min-width: 160px;
-  min-height: 48px;
-  padding: 10px 24px;
-  border: 3px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 900;
-  cursor: pointer;
-  box-shadow: var(--shadow-hard);
-  transition: transform .1s ease, box-shadow .1s ease;
-}
-.disc-quit-button:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 5px 5px 0 var(--line);
-}
-.disc-quit-button:active {
-  transform: translate(2px, 2px);
-  box-shadow: 0 0 0 var(--line);
-}
 .mode-buttons {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -878,13 +791,13 @@ html.scroll-locked, html.scroll-locked body { overflow: hidden; height: 100%; }
 }
 .modal-close:hover { color: var(--ink); }
 .guide-list { list-style: none; padding: 0; margin: 22px 0; display: grid; gap: 15px; text-align: left; }
-.guide-list li { display: flex; gap: 12px; }
+.guide-list li { display: flex; align-items: flex-start; gap: 12px; }
 .guide-list li > b {
   display: grid;
   place-items: center;
+  flex: 0 0 34px;
   width: 34px;
-  aspect-ratio: 1;
-  flex: none;
+  height: 34px;
   border: 2px solid var(--blue);
   border-radius: 50%;
   color: var(--blue);
@@ -988,7 +901,7 @@ html.scroll-locked, html.scroll-locked body { overflow: hidden; height: 100%; }
 
 /* Toolbar: tabs + selects */
 .lb-toolbar { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; }
-.leaderboard-controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; flex: 1 1 300px; }
+.leaderboard-controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; flex: 1 1 360px; }
 .leaderboard-controls button {
   min-height: 42px;
   border: 3px solid var(--line);
@@ -1274,7 +1187,7 @@ html.scroll-locked, html.scroll-locked body { overflow: hidden; height: 100%; }
   .lb-name { font-size: 16px; }
   .lb-time { font-size: 22px; }
   .lb-sectors { grid-template-columns: repeat(2, 1fr); gap: 6px; }
-  .leaderboard-controls { grid-template-columns: repeat(2, 1fr); }
+  .leaderboard-controls { grid-template-columns: repeat(3, 1fr); }
   .leaderboard-filters { flex-basis: 100%; }
 }
 

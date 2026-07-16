@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS auth_events_lookup_idx
 CREATE TABLE IF NOT EXISTS game_runs (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  mode varchar(16) NOT NULL CHECK (mode IN ('daily', 'easy', 'classic', 'fifty')),
+  mode varchar(16) NOT NULL CHECK (mode IN ('daily', 'replay', 'easy', 'classic', 'fifty')),
   grid_size smallint,
   run_date date NOT NULL,
   level_id varchar(80) NOT NULL,
@@ -43,22 +43,20 @@ CREATE TABLE IF NOT EXISTS game_runs (
   started_at timestamptz NOT NULL DEFAULT now(),
   finished_at timestamptz,
   CHECK (
-    (mode = 'daily' AND grid_size IS NULL) OR
+    (mode IN ('daily', 'replay') AND grid_size IS NULL) OR
     (mode IN ('easy', 'classic') AND grid_size BETWEEN 3 AND 6) OR
     (mode = 'fifty' AND grid_size = 5)
   )
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS game_runs_daily_once_idx
-  ON game_runs(user_id, run_date)
-  WHERE mode = 'daily';
 CREATE INDEX IF NOT EXISTS game_runs_user_idx ON game_runs(user_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS game_runs_daily_user_date_idx ON game_runs(user_id, run_date) WHERE mode = 'daily';
 
 CREATE TABLE IF NOT EXISTS scores (
   id uuid PRIMARY KEY,
   run_id uuid NOT NULL UNIQUE REFERENCES game_runs(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  mode varchar(16) NOT NULL CHECK (mode IN ('daily', 'easy', 'classic', 'fifty')),
+  mode varchar(16) NOT NULL CHECK (mode IN ('daily', 'replay', 'easy', 'classic', 'fifty')),
   grid_size smallint,
   score_date date NOT NULL,
   level_id varchar(80) NOT NULL,
@@ -72,9 +70,14 @@ CREATE TABLE IF NOT EXISTS scores (
 CREATE INDEX IF NOT EXISTS scores_daily_rank_idx
   ON scores(score_date, total_ms, total_errors, completed_at)
   WHERE mode = 'daily';
+CREATE UNIQUE INDEX IF NOT EXISTS scores_daily_user_date_once_idx
+  ON scores(user_id, score_date)
+  WHERE mode = 'daily';
+CREATE INDEX IF NOT EXISTS scores_replay_rank_idx
+  ON scores(score_date, total_ms, total_errors, completed_at)
+  WHERE mode = 'replay';
 CREATE INDEX IF NOT EXISTS scores_infinite_rank_idx
   ON scores(mode, grid_size, total_ms, total_errors, completed_at)
-  WHERE mode <> 'daily';
+  WHERE mode NOT IN ('daily', 'replay');
 CREATE INDEX IF NOT EXISTS scores_today_rank_idx
   ON scores(mode, grid_size, score_date, total_ms, total_errors, completed_at);
-

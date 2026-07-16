@@ -1,6 +1,6 @@
 # 每日方格
 
-舒尔特方格 Web 游戏：北京时间每天提供同一套 3×3、4×4、5×5、1-50 四关每日挑战，同时保留简单、经典、1-50 三类无限模式。每日复战使用随机布局，但不会进入排行榜。
+舒尔特方格 Web 游戏：北京时间每天提供同一套 3×3、4×4、5×5、1-50 四关每日挑战，同时保留简单、经典、1-50 三类无限模式，以及使用随机布局的复战模式（拥有独立排行榜）。
 
 前端仍是原生 HTML/CSS/JS，静态资源位于 `public/`。Vercel Functions 只负责同源安全代理，用户、正式运行和成绩由当前服务器上的 `backend/` Node 服务处理，并写入 Docker Compose 管理的 PostgreSQL。
 
@@ -10,9 +10,9 @@
 - 不提供公开用户选择列表；用户名只在排行榜和当前用户界面中展示。
 - PIN 使用 Node.js `scrypt` 加盐哈希；登录会话是 30 天有效的 HttpOnly、SameSite=Lax Cookie。
 - PIN 登录按“用户 + IP”和 IP 总量限流。`AUTH_PEPPER` 只用于不可逆地散列请求 IP，不会保存原始 IP。
-- 每日挑战由数据库按“用户 + 北京时间日期”强制每天只能开始一次；开始后放弃也不能重新计时。
+- 每日挑战可无限重开和重复游玩；数据库按“用户 + 北京时间日期”只记录首次完整完成，后续完成不会覆盖每日榜成绩。
 - 简单、经典、1-50 无限模式每次正式完成都会提交；排行榜按每个用户在所选时间范围内的最佳成绩展示。
-- 每日复战的 `replay` 模式不会创建服务端运行，也不能提交成绩。
+- 每日复战的 `replay` 模式使用随机布局，可多次上榜，进入独立的复战排行榜（与每日排行榜互不混入）。
 - 普通紫色表示该玩法/规格的“今日全体最快”；其他人提交更快成绩后会动态改变。
 - 特殊深紫渐变表示跨日期“整体最速”，优先级高于今日最快。
 
@@ -67,7 +67,7 @@ docker exec schulte-postgres pg_dump -U schulte -d schulte -Fc > schulte-$(date 
 - `BACKEND_PROXY_SECRET` 必须与服务器 `.env.backend` 中的 `PROXY_SECRET` 一致。
 - `.env.backend` 包含生产密钥，权限应保持为 `0600`，不可提交到 Git。
 
-数据库迁移位于 `db/001_initial.sql`。迁移脚本可以重复执行，当前语句都使用 `IF NOT EXISTS`。
+数据库迁移位于 `db/*.sql`，按文件名顺序执行。迁移脚本可以重复执行，当前语句都使用 `IF NOT EXISTS`。
 
 Vercel 发布：
 
@@ -81,7 +81,7 @@ npx vercel deploy --prebuilt --prod --yes
 
 - `POST /api/users`：使用用户名和四位 PIN 注册用户并自动登录。
 - `GET/POST/DELETE /api/session`：读取当前用户、使用用户名和 PIN 登录、退出。
-- `POST /api/runs/start`：登记正式每日或无限模式运行；拒绝 `replay`。
+- `POST /api/runs/start`：登记正式每日、复战或无限模式运行；每日模式允许重复开始。
 - `POST /api/runs/finish`：校验阶段结构并原子写入成绩。
 - `GET /api/leaderboard`：读取每日或无限模式的今日/整体排行榜和动态计时基准。
 - `GET /api/health`：通过 Vercel 检查本机后端与数据库链路。

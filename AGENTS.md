@@ -1,13 +1,13 @@
 # 项目说明（AGENTS.md）
 
-舒尔特方格 Web 游戏：每日固定挑战（3×3、4×4、5×5、1-50 四关，北京时间每个身份每天只玩一次）+ 无限模式。正式成绩经 Vercel Functions 安全代理写入当前服务器的 Node API + PostgreSQL；每日复战不进榜。
+舒尔特方格 Web 游戏：每日固定挑战（3×3、4×4、5×5、1-50 四关，可无限重开和重复挑战，当天首次完整完成记入每日榜）+ 复战模式（随机布局，独立排行榜）+ 无限模式。正式成绩经 Vercel Functions 安全代理写入当前服务器的 Node API + PostgreSQL；复战与无限模式可多次上榜，每日榜每人当天仅一条。
 
 ## 技术栈
 
 - 原生 HTML/CSS/JS 前端，无框架、无打包器（`public/app.js`、`public/api.js`、`public/theme.js`、`public/sw.js`）。
 - Vercel API：`api/**/*.mjs` 是薄代理，使用 `BACKEND_ORIGIN`、`BACKEND_PROXY_SECRET` 调用本机后端。
 - 后端：`backend/server.mjs` + `backend/routes/`，Docker Compose 服务名为 `api` / 容器名为 `schulte-api`。
-- 数据库：Docker Compose PostgreSQL 16，驱动为 `postgres`，迁移在 `db/001_initial.sql`，数据卷为 `schulte_postgres_data`。
+- 数据库：Docker Compose PostgreSQL 16，驱动为 `postgres`，迁移在 `db/*.sql`（按文件名顺序执行），数据卷为 `schulte_postgres_data`。
 - 公网入口：`schulte.introl.me` Cloudflare Tunnel → `192.168.1.104:3030`。
 - 服务端仅本地/容器内提供静态文件：`server.js`（Node 原生 `http`，零依赖）。
 - 关卡生成用原生 Node 脚本，无第三方依赖。
@@ -26,7 +26,9 @@
 ## 关键约定
 
 - 关卡布局由日期 + 规格 + `RULES_VERSION` 确定性生成，逻辑在 `scripts/daily-levels.js`。改规则务必同步 `RULES_VERSION`，否则旧缓存关卡失效。
-- `replay` 永远不能传给 `/api/runs/start` 或写入 `scores`；每日/无限模式的正式开始必须先创建服务端 run。
+- `daily` / `replay` / `easy` / `classic` / `fifty` 五种模式均为正式玩法，开始必须先调用 `/api/runs/start` 创建服务端 run，完成后调用 `/api/runs/finish` 写入 `scores`。
+- `daily` 模式：开始次数不受限制；服务端通过 `scores` 的“用户 + 北京时间日期”唯一索引只记录当天首次完整完成，后续完成不覆盖每日榜成绩。
+- `replay` 模式：随机布局，使用与 `daily` 相同的 4 阶段结构，可多次上榜，进入独立的复战排行榜。
 - 普通紫色是今日全体最快，特殊深紫是整体最速；颜色从排行榜 benchmark 动态计算，不能持久化成永久评级。
 - PostgreSQL 不得映射宿主机端口；API 只能绑定内网 `192.168.1.104:3030`，并要求 `PROXY_SECRET`。
 - 修改后端后必须重建 `docker compose up -d --build api`，验证容器 health、`schulte.introl.me/healthz` 和 `game.introl.me/api/health`。

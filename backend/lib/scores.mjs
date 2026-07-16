@@ -1,6 +1,6 @@
 import { HttpError } from './http.mjs';
 
-export const COMPETITIVE_MODES = new Set(['daily', 'easy', 'classic', 'fifty']);
+export const COMPETITIVE_MODES = new Set(['daily', 'replay', 'easy', 'classic', 'fifty']);
 
 export function validateRunStart(body, serverDate) {
   const mode = String(body.mode || '');
@@ -37,7 +37,7 @@ export function validateScore(body, run) {
     throw new HttpError(400, 'INVALID_TOTAL', '总成绩与阶段成绩不一致');
   }
   const ageMs = Date.now() - new Date(run.started_at).getTime();
-  const maxAge = run.mode === 'daily' ? 26 * 3600000 : 6 * 3600000;
+  const maxAge = (run.mode === 'daily' || run.mode === 'replay') ? 26 * 3600000 : 6 * 3600000;
   if (ageMs < 0 || ageMs > maxAge) throw new HttpError(409, 'RUN_EXPIRED', '本次竞赛运行已过期，请重新开始');
   return { stages, totalMs, totalErrors };
 }
@@ -58,7 +58,7 @@ function validateStage(stage) {
 }
 
 function expectedStages(mode, gridSize) {
-  if (mode === 'daily') return [
+  if (mode === 'daily' || mode === 'replay') return [
     { type: 'classic', size: 3 },
     { type: 'classic', size: 4 },
     { type: 'classic', size: 5 },
