@@ -23,7 +23,7 @@ export async function POST(request) {
     const run = rows[0];
     if (run.score_id) {
       const leaderboard = await getLeaderboard({ mode: run.mode, gridSize: run.grid_size, timeframe: 'today', userId: user.id });
-      const me = leaderboard.entries.find((entry) => entry.isMe) || null;
+      const ranked = leaderboard.entries.find((entry) => entry.id === run.score_id) || null;
       const stages = Array.isArray(run.score_stages) ? run.score_stages : JSON.parse(run.score_stages || '[]');
       return json({
         accepted: true,
@@ -31,15 +31,12 @@ export async function POST(request) {
         recorded: true,
         leaderboard,
         ranking: {
-          rank: me?.rank || null,
+          scoreId: run.score_id,
+          rank: ranked?.rank || null,
           totalTier: tierFor(Number(run.score_total_ms), leaderboard.benchmarks.total),
           stageTiers: stages.map((stage, index) => tierFor(Number(stage.durationMs), leaderboard.benchmarks.stages[index]))
         }
       });
-    }
-    if (run.mode === 'daily' && run.finished_at) {
-      const leaderboard = await getLeaderboard({ mode: run.mode, gridSize: run.grid_size, timeframe: 'today', userId: user.id });
-      return json({ accepted: true, duplicate: true, recorded: false, leaderboard, ranking: null });
     }
     const score = validateScore(body, run);
     const scoreId = randomUUID();
@@ -50,19 +47,6 @@ export async function POST(request) {
         RETURNING *
       `;
       if (!finished.length) return [];
-      if (run.mode === 'daily') {
-        return transaction`
-          INSERT INTO scores (
-            id, run_id, user_id, mode, grid_size, score_date, level_id, rules_version,
-            total_ms, total_errors, stages, completed_at
-          ) VALUES (
-            ${scoreId}, ${runId}, ${user.id}, ${run.mode}, ${run.grid_size}, ${run.run_date}, ${run.level_id}, ${run.rules_version},
-            ${score.totalMs}, ${score.totalErrors}, ${transaction.json(score.stages)}, now()
-          )
-          ON CONFLICT (user_id, score_date) WHERE mode = 'daily' DO NOTHING
-          RETURNING id
-        `;
-      }
       return transaction`
         INSERT INTO scores (
           id, run_id, user_id, mode, grid_size, score_date, level_id, rules_version,
@@ -73,20 +57,20 @@ export async function POST(request) {
         ) RETURNING id
       `;
     });
-    if (!inserted.length && run.mode !== 'daily') throw new HttpError(409, 'RUN_ALREADY_FINISHED', '本次竞赛运行已经结束');
+    if (!inserted.length) throw new HttpError(409, 'RUN_ALREADY_FINISHED', '本次竞赛运行已经结束');
     const leaderboard = await getLeaderboard({ mode: run.mode, gridSize: run.grid_size, timeframe: 'today', userId: user.id });
-    const recorded = inserted.length > 0;
-    const me = leaderboard.entries.find((entry) => entry.isMe) || null;
+    const ranked = leaderboard.entries.find((entry) => entry.id === scoreId) || null;
     return json({
       accepted: true,
       duplicate: false,
-      recorded,
+      recorded: true,
       leaderboard,
-      ranking: recorded ? {
-        rank: me?.rank || null,
+      ranking: {
+        scoreId,
+        rank: ranked?.rank || null,
         totalTier: tierFor(score.totalMs, leaderboard.benchmarks.total),
         stageTiers: score.stages.map((stage, index) => tierFor(stage.durationMs, leaderboard.benchmarks.stages[index]))
-      } : null
+      }
     });
   } catch (error) {
     return errorResponse(error);

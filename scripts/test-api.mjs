@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { normalizeUsername, usernameKey, validatePin } from '../backend/lib/auth.mjs';
-import { tierFor } from '../backend/lib/leaderboard.mjs';
+import { LEADERBOARD_LIMIT, tierFor } from '../backend/lib/leaderboard.mjs';
 import { validateRunStart, validateScore } from '../backend/lib/scores.mjs';
 
 assert.equal(normalizeUsername('  小明_07  '), '小明_07');
@@ -39,5 +39,6 @@ assert.equal(tierFor(9000, benchmark), 'overall-fastest');
 assert.equal(tierFor(11000, benchmark), 'today-fastest');
 assert.equal(tierFor(15000, benchmark), 'normal');
 assert.equal(tierFor(17000, benchmark), 'slower');
+assert.equal(LEADERBOARD_LIMIT, 20);
 
 console.log('API validation and ranking tier tests passed.');

@@ -553,6 +553,7 @@ async function finishChallenge() {
   app.active.finished = true;
   const result = buildResult();
   const firstResult = saveFirstResult(result);
+  result.savedAsFirst = firstResult;
   const newBest = saveBestResult(result);
   if (result.mode !== 'daily' && result.mode !== 'replay') pushInfiniteHistory(result);
   saveData();
@@ -603,7 +604,7 @@ function renderResult(result, savedAsFirst, newBest = false) {
     $('resultCompare').textContent = result.globalRank ? `第 ${result.globalRank} 名` : '随机布局 · 独立排行';
   } else {
     $('resultCompareLabel').textContent = result.globalRank
-      ? (result.globalRankIsBest ? '用户最佳排名' : '全局排名')
+      ? '全局排名'
       : isDaily && !savedAsFirst ? '今日首次成绩' : isDaily ? '近期对比' : '本地最快';
     $('resultCompare').textContent = result.globalRank
       ? `第 ${result.globalRank} 名`
@@ -612,18 +613,30 @@ function renderResult(result, savedAsFirst, newBest = false) {
   }
   $('resultNote').textContent = isDaily
     ? (savedAsFirst
-        ? (result.syncError ? `本地成绩已保存，但未进入全局榜：${result.syncError}` : result.globalRank ? `正式成绩已进入今日全局榜，目前排名第 ${result.globalRank}。` : '成绩已保存，正在同步到今日全局榜。')
-        : `本次为再次挑战，不覆盖今日首次正式成绩。今日记录为 ${formatDuration(app.data.records[result.date]?.totalMs || result.totalMs)}。`)
+        ? (result.syncError
+            ? `本地成绩已保存，但未进入全局榜：${result.syncError}`
+            : result.globalRank
+              ? `正式成绩已进入今日 Top 20，目前排名第 ${result.globalRank}。`
+              : result.recorded ? '成绩已保存，当前未进入今日 Top 20。' : '成绩已保存，正在同步到今日全局榜。')
+        : result.syncError
+          ? `本次成绩未同步到每日榜：${result.syncError}`
+          : result.globalRank
+            ? `本次成绩已进入今日 Top 20，目前排名第 ${result.globalRank}；首页仍展示当天首次完成记录。`
+            : result.recorded
+              ? '本次成绩已保存，当前未进入今日 Top 20；首页仍展示当天首次完成记录。'
+              : '本次成绩正在同步到每日榜。')
     : isReplay
       ? (result.syncError
           ? `本地成绩已保存，但未进入复战榜：${result.syncError}`
           : result.globalRank
-            ? `成绩已进入今日复战榜，目前排名第 ${result.globalRank}。`
-            : '成绩正在同步到复战榜。')
+            ? `成绩已进入复战 Top 20，目前排名第 ${result.globalRank}。`
+            : result.recorded ? '成绩已保存，当前未进入复战 Top 20。' : '成绩正在同步到复战榜。')
       : result.syncError
         ? `本地成绩已保存，但未进入全局榜：${result.syncError}`
         : result.globalRank
-          ? `成绩已进入${infiniteResultName(result)}今日全局榜，目前排名第 ${result.globalRank}。`
+          ? `成绩已进入${infiniteResultName(result)} Top 20，目前排名第 ${result.globalRank}。`
+          : result.recorded
+            ? `成绩已保存，当前未进入${infiniteResultName(result)} Top 20。`
           : newBest
             ? `本地新纪录！正在同步${infiniteResultName(result)}全局榜。`
             : `成绩正在同步，当前本地最快为 ${formatDuration(bestResultFor(result)?.totalMs || result.totalMs)}。`;
@@ -645,8 +658,8 @@ async function submitCompetitiveResult(result, savedAsFirst, newBest) {
     });
     result.recorded = response.recorded !== false;
     if (response.ranking) {
+      result.globalScoreId = response.ranking.scoreId;
       result.globalRank = response.ranking.rank;
-      result.globalRankIsBest = result.mode !== 'daily';
       result.globalTiers = {
         total: response.ranking.totalTier,
         stages: response.ranking.stageTiers
@@ -1010,7 +1023,7 @@ function renderLeaderboard(board) {
   const primaryLabel = isToday ? 'TODAY FASTEST · 今日最快' : 'ALL-TIME BEST · 整体最速';
   const secondaryLabel = isToday ? '整体最速' : '今日最快';
   const participants = board.participantCount ?? board.entries.length;
-  const participantLabel = showScoreDate ? '用户' : '参与';
+  const participantLabel = '记录';
 
   const sectorsHtml = (stages, fallbackLabels) => stages && stages.length > 1
     ? `<div class="lb-sectors">${stages.map((stage, i) => {
@@ -1120,7 +1133,6 @@ async function refreshDynamicRankings() {
 
 async function refreshResultRanking(result) {
   try {
-    const dailyShaped = result.mode === 'daily' || result.mode === 'replay';
     const board = result.mode === 'daily'
       ? app.dailyLeaderboard
       : result.mode === 'replay'
@@ -1131,15 +1143,13 @@ async function refreshResultRanking(result) {
       total: tierFromBenchmark(result.totalMs, board.benchmarks.total),
       stages: result.stages.map((stage, index) => tierFromBenchmark(stage.durationMs, board.benchmarks.stages[index]))
     };
-    const me = board.entries.find((entry) => entry.isMe);
-    if (me && result.recorded !== false) {
-      result.globalRank = me.rank;
-      result.globalRankIsBest = !dailyShaped;
-    } else if (result.recorded === false) {
+    const ranked = result.globalScoreId ? board.entries.find((entry) => entry.id === result.globalScoreId) : null;
+    if (ranked) {
+      result.globalRank = ranked.rank;
+    } else {
       delete result.globalRank;
-      delete result.globalRankIsBest;
     }
-    renderResult(result, result.mode === 'daily' && result.recorded !== false, false);
+    renderResult(result, Boolean(result.savedAsFirst), false);
   } catch (error) {
     console.warn('成绩颜色刷新失败', error);
   }
