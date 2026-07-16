@@ -2,6 +2,8 @@ import { getSql } from './db.mjs';
 import { HttpError } from './http.mjs';
 import { shanghaiDate } from './time.mjs';
 
+export const LEADERBOARD_LIMIT = 20;
+
 export async function getLeaderboard({ mode, gridSize = null, timeframe = 'today', userId = null }) {
   if (!['daily', 'replay', 'easy', 'classic', 'fifty'].includes(mode)) throw new HttpError(400, 'INVALID_MODE', '排行榜玩法无效');
   if (!['today', 'all'].includes(timeframe)) throw new HttpError(400, 'INVALID_TIMEFRAME', '排行榜时间范围无效');
@@ -14,7 +16,7 @@ export async function getLeaderboard({ mode, gridSize = null, timeframe = 'today
   const dailyShaped = mode === 'daily' || mode === 'replay';
   const effectiveTimeframe = mode === 'replay' ? 'today' : timeframe;
   const [entries, benchmarks, participantCount] = await Promise.all([
-    dailyShaped ? dailyEntries(sql, mode, effectiveTimeframe, today, userId) : infiniteEntries(sql, mode, size, effectiveTimeframe, today, userId),
+    dailyShaped ? dailyEntries(sql, mode, effectiveTimeframe, today) : infiniteEntries(sql, mode, size, effectiveTimeframe, today),
     loadBenchmarks(sql, mode, size, today),
     loadParticipantCount(sql, mode, size, effectiveTimeframe, today)
   ]);
@@ -35,40 +37,36 @@ async function loadParticipantCount(sql, mode, size, timeframe, date) {
     return Number(row?.total || 0);
   }
   if (mode === 'daily') {
-    const [row] = await sql`SELECT count(DISTINCT user_id)::int AS total FROM scores WHERE mode = 'daily'`;
+    const [row] = await sql`SELECT count(*)::int AS total FROM scores WHERE mode = 'daily'`;
     return Number(row?.total || 0);
   }
   if (timeframe === 'today') {
     const [row] = await sql`
-      SELECT count(DISTINCT user_id)::int AS total FROM scores
+      SELECT count(*)::int AS total FROM scores
       WHERE mode = ${mode} AND grid_size = ${size} AND score_date = ${date}
     `;
     return Number(row?.total || 0);
   }
   const [row] = await sql`
-    SELECT count(DISTINCT user_id)::int AS total FROM scores
+    SELECT count(*)::int AS total FROM scores
     WHERE mode = ${mode} AND grid_size = ${size}
   `;
   return Number(row?.total || 0);
 }
 
-async function dailyEntries(sql, mode, timeframe, date, userId) {
+async function dailyEntries(sql, mode, timeframe, date) {
   if (mode === 'daily' && timeframe === 'all') {
     return sql`
-      WITH personal_best AS (
-        SELECT DISTINCT ON (s.user_id)
-          s.id, s.user_id, u.display_name AS username, s.score_date,
-          s.total_ms, s.total_errors, s.stages, s.completed_at
+      WITH ordered AS (
+        SELECT s.id, s.user_id, u.display_name AS username, s.score_date,
+          s.total_ms, s.total_errors, s.stages, s.completed_at,
+          row_number() OVER (ORDER BY s.total_ms, s.total_errors, s.completed_at) AS rank
         FROM scores s
         JOIN users u ON u.id = s.user_id
         WHERE s.mode = 'daily'
-        ORDER BY s.user_id, s.total_ms, s.total_errors, s.completed_at
-      ), ordered AS (
-        SELECT *, row_number() OVER (ORDER BY total_ms, total_errors, completed_at) AS rank
-        FROM personal_best
       )
       SELECT * FROM ordered
-      WHERE rank <= 50 OR user_id = ${userId}
+      WHERE rank <= ${LEADERBOARD_LIMIT}
       ORDER BY rank
     `;
   }
@@ -82,44 +80,38 @@ async function dailyEntries(sql, mode, timeframe, date, userId) {
       WHERE s.mode = ${mode} AND s.score_date = ${date}
     )
     SELECT * FROM ordered
-    WHERE rank <= 50 OR user_id = ${userId}
+    WHERE rank <= ${LEADERBOARD_LIMIT}
     ORDER BY rank
   `;
 }
 
-async function infiniteEntries(sql, mode, size, timeframe, date, userId) {
+async function infiniteEntries(sql, mode, size, timeframe, date) {
   if (timeframe === 'today') {
     return sql`
-      WITH personal_best AS (
-        SELECT DISTINCT ON (s.user_id)
-          s.id, s.user_id, u.display_name AS username, s.total_ms, s.total_errors, s.stages, s.completed_at
+      WITH ordered AS (
+        SELECT s.id, s.user_id, u.display_name AS username, s.score_date,
+          s.total_ms, s.total_errors, s.stages, s.completed_at,
+          row_number() OVER (ORDER BY s.total_ms, s.total_errors, s.completed_at) AS rank
         FROM scores s
         JOIN users u ON u.id = s.user_id
         WHERE s.mode = ${mode} AND s.grid_size = ${size} AND s.score_date = ${date}
-        ORDER BY s.user_id, s.total_ms, s.total_errors, s.completed_at
-      ), ordered AS (
-        SELECT *, row_number() OVER (ORDER BY total_ms, total_errors, completed_at) AS rank
-        FROM personal_best
       )
       SELECT * FROM ordered
-      WHERE rank <= 50 OR user_id = ${userId}
+      WHERE rank <= ${LEADERBOARD_LIMIT}
       ORDER BY rank
     `;
   }
   return sql`
-    WITH personal_best AS (
-      SELECT DISTINCT ON (s.user_id)
-        s.id, s.user_id, u.display_name AS username, s.total_ms, s.total_errors, s.stages, s.completed_at
+    WITH ordered AS (
+      SELECT s.id, s.user_id, u.display_name AS username, s.score_date,
+        s.total_ms, s.total_errors, s.stages, s.completed_at,
+        row_number() OVER (ORDER BY s.total_ms, s.total_errors, s.completed_at) AS rank
       FROM scores s
       JOIN users u ON u.id = s.user_id
       WHERE s.mode = ${mode} AND s.grid_size = ${size}
-      ORDER BY s.user_id, s.total_ms, s.total_errors, s.completed_at
-    ), ordered AS (
-      SELECT *, row_number() OVER (ORDER BY total_ms, total_errors, completed_at) AS rank
-      FROM personal_best
     )
     SELECT * FROM ordered
-    WHERE rank <= 50 OR user_id = ${userId}
+    WHERE rank <= ${LEADERBOARD_LIMIT}
     ORDER BY rank
   `;
 }

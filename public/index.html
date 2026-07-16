@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=22" />
+    <link rel="stylesheet" href="styles.css?v=23" />
   </head>
   <body>
     <div id="dateNotice" class="date-notice hidden" role="status">
@@ -64,7 +64,7 @@
                 <div class="sector"><span>1-50</span><b>--:--.---</b></div>
               </div>
             </div>
-            <p class="card-description">每日挑战固定为 3×3、4×4、5×5、1-50 四关，可随时重开和重复挑战；当天首次正式完成进入今日全局榜。</p>
+            <p class="card-description">每日挑战固定为 3×3、4×4、5×5、1-50 四关，可随时重开和重复挑战；每次完整完成都会进入排行榜统计。</p>
             <button id="startBtn" class="primary-button">开始今日挑战 <span>-></span></button>
             <button id="dailyShareBtn" class="secondary-button share-button hidden">分享今日成绩</button>
             <button id="dailyReplayBtn" class="secondary-button replay-button hidden">复战今日 · 随机布局</button>
@@ -173,7 +173,7 @@
         </div>
         <div id="lbBenchmark" class="lb-benchmark"></div>
         <div id="leaderboardList" class="leaderboard-list"><div class="empty-state">正在加载排行榜…</div></div>
-        <p class="privacy-hint">每日榜可查看今日最快或跨日期的个人整体最快；复战榜按当天成绩排名；简单 / 经典 / 1-50 榜展示每个用户在所选范围内的最佳成绩。</p>
+        <p class="privacy-hint">所有排行榜保留每一次完整成绩，同一用户可以重复出现；榜单严格只展示 Top 20。</p>
       </section>
     </main>
 
@@ -197,7 +197,7 @@
         <ol class="guide-list">
           <li><b>01</b><span><strong>按目标数字依次点击</strong><small>点错不会推进，计时会继续。</small></span></li>
           <li><b>02</b><span><strong>不同模式有不同反馈</strong><small>简单模式持续高亮；经典与每日挑战不留颜色；1-50 会翻出下一层数字。</small></span></li>
-          <li><b>03</b><span><strong>每日可重开，复战有独立榜</strong><small>每日挑战可随时重开和重复游玩，当天只记录首次完整完成；复战使用随机布局，成绩进入独立排行榜。</small></span></li>
+          <li><b>03</b><span><strong>每次成绩都保留</strong><small>每日、复战和无限模式的每次完整成绩都会记录；同一用户可多次进入排行榜 Top 20。</small></span></li>
         </ol>
         <div class="theme-slider-card">
           <div><strong>选择方格主题色</strong><small id="guideThemeName">海洋蓝</small></div>
@@ -287,8 +287,8 @@
         <p class="eyebrow">WHAT'S NEW</p>
         <h2 id="updateTitle">本次更新</h2>
         <ul class="update-list">
-          <li><b>01</b><span><strong>每日挑战可重复参与</strong><small>中途退出可从头重开，完成后也能继续挑战；当天只记录首次正式完成。</small></span></li>
-          <li><b>02</b><span><strong>复战独立排行榜</strong><small>随机布局复战成绩进入专属排行榜，不再与每日挑战成绩混合。</small></span></li>
+          <li><b>01</b><span><strong>每日挑战可重复参与</strong><small>中途退出可从头重开，完成后也能继续挑战；每次完整成绩都会记录。</small></span></li>
+          <li><b>02</b><span><strong>排行榜保留每次成绩</strong><small>同一用户可以多次上榜，所有榜单严格展示速度最快的 Top 20 记录。</small></span></li>
           <li><b>03</b><span><strong>分享统计更准确</strong><small>无限模式按玩法和方格规格分别计算局数、最佳成绩与平均成绩。</small></span></li>
           <li><b>04</b><span><strong>无限模式精简</strong><small>移除圆盘模式，并优化玩法说明中的步骤编号排版。</small></span></li>
         </ul>
@@ -305,8 +305,8 @@
     </div>
 
     <div id="toast" class="toast hidden" role="status"></div>
-    <script src="theme.js?v=22"></script>
-    <script src="api.js?v=22"></script>
-    <script src="app.js?v=22"></script>
+    <script src="theme.js?v=23"></script>
+    <script src="api.js?v=23"></script>
+    <script src="app.js?v=23"></script>
   </body>
 </html>

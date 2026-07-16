@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS scores (
 CREATE INDEX IF NOT EXISTS scores_daily_rank_idx
   ON scores(score_date, total_ms, total_errors, completed_at)
   WHERE mode = 'daily';
-CREATE UNIQUE INDEX IF NOT EXISTS scores_daily_user_date_once_idx
+CREATE INDEX IF NOT EXISTS scores_daily_user_date_idx
   ON scores(user_id, score_date)
   WHERE mode = 'daily';
 CREATE INDEX IF NOT EXISTS scores_replay_rank_idx
