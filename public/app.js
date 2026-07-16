@@ -958,11 +958,12 @@ function renderLeaderboardControls() {
     button.classList.toggle('active', button.dataset.boardMode === app.leaderboardMode);
   }
   const dailyShaped = app.leaderboardMode === 'daily' || app.leaderboardMode === 'replay';
+  const fixedToday = app.leaderboardMode === 'replay';
   const fifty = app.leaderboardMode === 'fifty';
   $('leaderboardSize').value = String(fifty ? 5 : app.leaderboardSize);
   $('leaderboardSize').disabled = dailyShaped || fifty;
-  $('leaderboardTimeframe').value = dailyShaped ? 'today' : app.leaderboardTimeframe;
-  $('leaderboardTimeframe').disabled = dailyShaped;
+  $('leaderboardTimeframe').value = fixedToday ? 'today' : app.leaderboardTimeframe;
+  $('leaderboardTimeframe').disabled = fixedToday;
 }
 
 async function loadLeaderboard() {
@@ -973,10 +974,11 @@ async function loadLeaderboard() {
   $('leaderboardList').innerHTML = '<div class="empty-state">正在加载排行榜…</div>';
   try {
     const dailyShaped = app.leaderboardMode === 'daily' || app.leaderboardMode === 'replay';
+    const fixedToday = app.leaderboardMode === 'replay';
     const board = await SchulteApi.leaderboard({
       mode: app.leaderboardMode,
       size: dailyShaped ? null : app.leaderboardMode === 'fifty' ? 5 : app.leaderboardSize,
-      timeframe: dailyShaped ? 'today' : app.leaderboardTimeframe
+      timeframe: fixedToday ? 'today' : app.leaderboardTimeframe
     });
     if (board.mode === 'daily') app.dailyLeaderboard = board;
     if (board.mode === 'replay') app.replayLeaderboard = board;
@@ -1002,11 +1004,13 @@ function renderLeaderboard(board) {
   const stageBenches = benchmarks.stages || [];
   const dailyShaped = board.mode === 'daily' || board.mode === 'replay';
   const isToday = (board.timeframe || 'today') === 'today';
+  const showScoreDate = board.mode === 'daily' && !isToday;
   const primaryMs = isToday ? totalBench.todayFastestMs : totalBench.overallFastestMs;
   const secondaryMs = isToday ? totalBench.overallFastestMs : totalBench.todayFastestMs;
   const primaryLabel = isToday ? 'TODAY FASTEST · 今日最快' : 'ALL-TIME BEST · 整体最速';
   const secondaryLabel = isToday ? '整体最速' : '今日最快';
   const participants = board.participantCount ?? board.entries.length;
+  const participantLabel = showScoreDate ? '用户' : '参与';
 
   const sectorsHtml = (stages, fallbackLabels) => stages && stages.length > 1
     ? `<div class="lb-sectors">${stages.map((stage, i) => {
@@ -1030,7 +1034,7 @@ function renderLeaderboard(board) {
       <div class="lb-bench tier-${benchTier}">
         <div class="lb-bench-top">
           <span class="lb-bench-tag">${primaryLabel}</span>
-          <span class="lb-bench-count">参与 <b>${participants}</b></span>
+          <span class="lb-bench-count">${participantLabel} <b>${participants}</b></span>
         </div>
         <strong class="lb-bench-time">${formatDuration(primaryMs)}</strong>
         ${benchSectors}
@@ -1041,7 +1045,7 @@ function renderLeaderboard(board) {
       <div class="lb-bench">
         <div class="lb-bench-top">
           <span class="lb-bench-tag">${primaryLabel}</span>
-          <span class="lb-bench-count">参与 <b>${participants}</b></span>
+          <span class="lb-bench-count">${participantLabel} <b>${participants}</b></span>
         </div>
         <strong class="lb-bench-time">--:--.---</strong>
       </div>`;
@@ -1063,7 +1067,7 @@ function renderLeaderboard(board) {
           <time class="lb-time tier-${entry.tier}">${formatDuration(entry.totalMs)}</time>
         </div>
         ${entrySectors}
-        <div class="lb-meta">错误 ${entry.totalErrors}</div>
+        <div class="lb-meta">错误 ${entry.totalErrors}${showScoreDate && entry.scoreDate ? ` · 记录日期 ${formatChineseDate(entry.scoreDate)}` : ''}</div>
       </div>
     </article>`;
   }).join('');

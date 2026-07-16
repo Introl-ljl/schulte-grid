@@ -83,7 +83,7 @@ npx vercel deploy --prebuilt --prod --yes
 - `GET/POST/DELETE /api/session`：读取当前用户、使用用户名和 PIN 登录、退出。
 - `POST /api/runs/start`：登记正式每日、复战或无限模式运行；每日模式允许重复开始。
 - `POST /api/runs/finish`：校验阶段结构并原子写入成绩。
-- `GET /api/leaderboard`：读取每日或无限模式的今日/整体排行榜和动态计时基准。
+- `GET /api/leaderboard`：读取每日、复战或无限模式排行榜；每日整体榜汇总各用户跨日期的个人最快成绩并返回记录日期。
 - `GET /api/health`：通过 Vercel 检查本机后端与数据库链路。
 
 服务端会校验玩法、规格、每日关卡编号、阶段结构、总用时求和、合理用时范围和运行有效期。由于计时发生在浏览器，无法完全阻止主动篡改客户端的玩家；若未来需要强对抗作弊，应增加可信客户端证明或服务端事件流，而不是仅继续收紧毫秒阈值。
