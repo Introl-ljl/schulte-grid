@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=20" />
+    <link rel="stylesheet" href="styles.css?v=21" />
   </head>
   <body>
     <div id="dateNotice" class="date-notice hidden" role="status">
@@ -64,9 +64,8 @@
                 <div class="sector"><span>1-50</span><b>--:--.---</b></div>
               </div>
             </div>
-            <p class="card-description">每日挑战固定为 3×3、4×4、5×5、1-50 四关。登录后的首次正式挑战进入今日全局榜。</p>
-            <button id="startBtn" class="primary-button">开始今日挑战 <span>→</span></button>
-            <button id="dailyResumeBtn" class="secondary-button hidden">继续今日挑战</button>
+            <p class="card-description">每日挑战固定为 3×3、4×4、5×5、1-50 四关，可随时重开和重复挑战；当天首次正式完成进入今日全局榜。</p>
+            <button id="startBtn" class="primary-button">开始今日挑战 <span>-></span></button>
             <button id="dailyShareBtn" class="secondary-button share-button hidden">分享今日成绩</button>
             <button id="dailyReplayBtn" class="secondary-button replay-button hidden">复战今日 · 随机布局</button>
           </article>
@@ -82,7 +81,6 @@
               <button type="button" class="mode-button active" data-mode="easy" aria-pressed="true">简单</button>
               <button type="button" class="mode-button" data-mode="classic" aria-pressed="false">经典</button>
               <button type="button" class="mode-button" data-mode="fifty" aria-pressed="false">1-50</button>
-              <button type="button" class="mode-button" data-mode="disc" aria-pressed="false">圆盘</button>
             </div>
             <div id="sizePicker" class="size-picker" role="group" aria-label="方格规格选择">
               <span>方格规格</span>
@@ -91,13 +89,6 @@
               <button type="button" class="size-button" data-size="5" aria-pressed="false">5×5</button>
               <button type="button" class="size-button" data-size="6" aria-pressed="false">6×6</button>
             </div>
-            <div id="discDifficultyPicker" class="disc-difficulty-picker hidden" role="group" aria-label="圆盘难度选择">
-              <span>猎手难度</span>
-              <button type="button" class="disc-diff-button active" data-difficulty="easy" aria-pressed="true">初级</button>
-              <button type="button" class="disc-diff-button" data-difficulty="medium" aria-pressed="false">中级</button>
-              <button type="button" class="disc-diff-button" data-difficulty="hard" aria-pressed="false">高级</button>
-            </div>
-            <button id="discSimpleToggle" class="disc-simple-toggle hidden" type="button">已开启 · 完成后变色</button>
             <button id="infiniteBtn" class="secondary-button">开始简单模式 <span>→</span></button>
           </article>
         </div>
@@ -129,15 +120,11 @@
         <div class="target-row"><span>当前</span><strong><b id="targetLabel">1</b> / <i id="maxLabel">9</i></strong><button class="text-button reset-button hidden" id="resetBtn">↻ 重置游戏</button><span id="errorLabel">错误 0</span></div>
         <div id="gameBoard" class="game-board ready">
           <div id="grid" class="grid" role="group" aria-label="舒尔特方格"></div>
-          <canvas id="discCanvas" class="hidden" width="600" height="600" aria-label="旋转舒尔特圆盘"></canvas>
           <div id="gameStartPanel" class="game-start-panel">
             <button id="gameStartBtn" class="game-start-button">开始游戏</button>
           </div>
         </div>
         <p class="game-help" id="gameHelp">请按数字从小到大依次点击</p>
-        <div id="discControls" class="disc-controls hidden">
-          <button id="discQuitBtn" class="disc-quit-button">退出游戏</button>
-        </div>
       </section>
 
       <section id="resultView" class="view result-view hidden">
@@ -170,6 +157,7 @@
         <div class="lb-toolbar">
           <div id="leaderboardModes" class="leaderboard-controls" role="group" aria-label="排行榜玩法">
             <button class="active" data-board-mode="daily">每日</button>
+            <button data-board-mode="replay">复战</button>
             <button data-board-mode="easy">简单</button>
             <button data-board-mode="classic">经典</button>
             <button data-board-mode="fifty">1-50</button>
@@ -185,7 +173,7 @@
         </div>
         <div id="lbBenchmark" class="lb-benchmark"></div>
         <div id="leaderboardList" class="leaderboard-list"><div class="empty-state">正在加载排行榜…</div></div>
-        <p class="privacy-hint">无限模式展示每个用户在所选范围内的最佳成绩；每日复战不会进入任何排行榜。</p>
+        <p class="privacy-hint">每日与复战榜按当天成绩排名，可多次上榜；简单 / 经典 / 1-50 榜展示每个用户在所选范围内的最佳成绩。</p>
       </section>
     </main>
 
@@ -209,7 +197,7 @@
         <ol class="guide-list">
           <li><b>01</b><span><strong>按目标数字依次点击</strong><small>点错不会推进，计时会继续。</small></span></li>
           <li><b>02</b><span><strong>不同模式有不同反馈</strong><small>简单模式持续高亮；经典与每日挑战不留颜色；1-50 会翻出下一层数字。</small></span></li>
-           <li><b>03</b><span><strong>每日可复战，无限不限次</strong><small>每日挑战完成当天机会后，可用复战反复练习随机布局；无限模式可反复游玩。</small></span></li>
+          <li><b>03</b><span><strong>每日可重开，复战有独立榜</strong><small>每日挑战可随时重开和重复游玩，当天只记录首次完整完成；复战使用随机布局，成绩进入独立排行榜。</small></span></li>
         </ol>
         <div class="theme-slider-card">
           <div><strong>选择方格主题色</strong><small id="guideThemeName">海洋蓝</small></div>
@@ -226,7 +214,7 @@
         <button class="modal-close" data-close="historyModal" aria-label="关闭">×</button>
         <p class="eyebrow">LOCAL HISTORY</p><h2 id="historyTitle">最近 30 天</h2>
         <div id="historyList" class="history-list"></div>
-        <p class="privacy-hint">本地历史保存在当前浏览器；正式每日挑战和无限模式成绩会同步到当前用户的全局排行榜。</p>
+        <p class="privacy-hint">本地历史保存在当前浏览器；每日、复战与无限模式成绩会同步到当前用户的全局排行榜。</p>
       </div>
     </div>
 
@@ -299,10 +287,10 @@
         <p class="eyebrow">WHAT'S NEW</p>
         <h2 id="updateTitle">本次更新</h2>
         <ul class="update-list">
-          <li><b>01</b><span><strong>登录与注册合并</strong><small>登录和注册放在同一窗口，默认显示登录界面。</small></span></li>
-          <li><b>02</b><span><strong>一键切换注册</strong><small>点击下方“注册”即可切到注册窗口，已有账号可随时返回登录。</small></span></li>
-          <li><b>03</b><span><strong>用户名 + 四位 PIN</strong><small>取消公共身份选择，直接用用户名与 PIN 登录，用户名公开显示在排行榜。</small></span></li>
-          <li><b>04</b><span><strong>首次进入需登录</strong><small>未登录时停留在登录窗口，登录或注册成功后才能开始游戏。</small></span></li>
+          <li><b>01</b><span><strong>每日挑战可重复参与</strong><small>中途退出可从头重开，完成后也能继续挑战；当天只记录首次正式完成。</small></span></li>
+          <li><b>02</b><span><strong>复战独立排行榜</strong><small>随机布局复战成绩进入专属排行榜，不再与每日挑战成绩混合。</small></span></li>
+          <li><b>03</b><span><strong>分享统计更准确</strong><small>无限模式按玩法和方格规格分别计算局数、最佳成绩与平均成绩。</small></span></li>
+          <li><b>04</b><span><strong>无限模式精简</strong><small>移除圆盘模式，并优化玩法说明中的步骤编号排版。</small></span></li>
         </ul>
         <button class="primary-button" data-close="updateModal">知道了</button>
       </div>
@@ -317,9 +305,8 @@
     </div>
 
     <div id="toast" class="toast hidden" role="status"></div>
-    <script src="theme.js?v=20"></script>
-    <script src="api.js?v=20"></script>
-    <script src="disc-mode.js?v=20"></script>
-    <script src="app.js?v=20"></script>
+    <script src="theme.js?v=21"></script>
+    <script src="api.js?v=21"></script>
+    <script src="app.js?v=21"></script>
   </body>
 </html>

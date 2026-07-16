@@ -1,11 +1,11 @@
-const CACHE_NAME = 'schulte-daily-v20';
+const CACHE_NAME = 'schulte-daily-v21';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=20',
-  './app.js?v=20',
-  './api.js?v=20',
-  './theme.js?v=20',
+  './styles.css?v=21',
+  './app.js?v=21',
+  './api.js?v=21',
+  './theme.js?v=21',
   './data/daily-levels.json'
 ];
 
