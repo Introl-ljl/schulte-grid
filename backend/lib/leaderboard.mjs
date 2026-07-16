@@ -12,15 +12,16 @@ export async function getLeaderboard({ mode, gridSize = null, timeframe = 'today
   const today = shanghaiDate();
   const sql = getSql();
   const dailyShaped = mode === 'daily' || mode === 'replay';
+  const effectiveTimeframe = mode === 'replay' ? 'today' : timeframe;
   const [entries, benchmarks, participantCount] = await Promise.all([
-    dailyShaped ? dailyEntries(sql, mode, today, userId) : infiniteEntries(sql, mode, size, timeframe, today, userId),
+    dailyShaped ? dailyEntries(sql, mode, effectiveTimeframe, today, userId) : infiniteEntries(sql, mode, size, effectiveTimeframe, today, userId),
     loadBenchmarks(sql, mode, size, today),
-    loadParticipantCount(sql, mode, size, timeframe, today)
+    loadParticipantCount(sql, mode, size, effectiveTimeframe, today)
   ]);
   return {
     mode,
     gridSize: size,
-    timeframe: dailyShaped ? 'today' : timeframe,
+    timeframe: effectiveTimeframe,
     date: today,
     entries: entries.map((entry) => serializeEntry(entry, benchmarks, userId)),
     benchmarks,
@@ -29,8 +30,12 @@ export async function getLeaderboard({ mode, gridSize = null, timeframe = 'today
 }
 
 async function loadParticipantCount(sql, mode, size, timeframe, date) {
-  if (mode === 'daily' || mode === 'replay') {
+  if (mode === 'replay' || (mode === 'daily' && timeframe === 'today')) {
     const [row] = await sql`SELECT count(*)::int AS total FROM scores WHERE mode = ${mode} AND score_date = ${date}`;
+    return Number(row?.total || 0);
+  }
+  if (mode === 'daily') {
+    const [row] = await sql`SELECT count(DISTINCT user_id)::int AS total FROM scores WHERE mode = 'daily'`;
     return Number(row?.total || 0);
   }
   if (timeframe === 'today') {
@@ -47,10 +52,30 @@ async function loadParticipantCount(sql, mode, size, timeframe, date) {
   return Number(row?.total || 0);
 }
 
-async function dailyEntries(sql, mode, date, userId) {
+async function dailyEntries(sql, mode, timeframe, date, userId) {
+  if (mode === 'daily' && timeframe === 'all') {
+    return sql`
+      WITH personal_best AS (
+        SELECT DISTINCT ON (s.user_id)
+          s.id, s.user_id, u.display_name AS username, s.score_date,
+          s.total_ms, s.total_errors, s.stages, s.completed_at
+        FROM scores s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.mode = 'daily'
+        ORDER BY s.user_id, s.total_ms, s.total_errors, s.completed_at
+      ), ordered AS (
+        SELECT *, row_number() OVER (ORDER BY total_ms, total_errors, completed_at) AS rank
+        FROM personal_best
+      )
+      SELECT * FROM ordered
+      WHERE rank <= 50 OR user_id = ${userId}
+      ORDER BY rank
+    `;
+  }
   return sql`
     WITH ordered AS (
-      SELECT s.id, s.user_id, u.display_name AS username, s.total_ms, s.total_errors, s.stages, s.completed_at,
+      SELECT s.id, s.user_id, u.display_name AS username, s.score_date,
+        s.total_ms, s.total_errors, s.stages, s.completed_at,
         row_number() OVER (ORDER BY s.total_ms, s.total_errors, s.completed_at) AS rank
       FROM scores s
       JOIN users u ON u.id = s.user_id
@@ -169,6 +194,7 @@ function serializeEntry(entry, benchmarks, userId) {
     id: entry.id,
     rank: Number(entry.rank),
     username: entry.username,
+    scoreDate: dateOrNull(entry.score_date),
     totalMs: Number(entry.total_ms),
     totalErrors: Number(entry.total_errors),
     completedAt: entry.completed_at,
@@ -188,4 +214,10 @@ export function tierFor(value, benchmark) {
 
 function numberOrNull(value) {
   return value == null ? null : Number(value);
+}
+
+function dateOrNull(value) {
+  if (value == null) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
 }

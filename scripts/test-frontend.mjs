@@ -3,6 +3,10 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 
 const storage = new Map();
+const elements = {
+  leaderboardSize: { value: '3', disabled: false },
+  leaderboardTimeframe: { value: 'today', disabled: false }
+};
 const localStorage = {
   getItem: (key) => storage.has(key) ? storage.get(key) : null,
   setItem: (key, value) => storage.set(key, String(value)),
@@ -10,7 +14,12 @@ const localStorage = {
 };
 const context = vm.createContext({
   console,
-  document: { addEventListener() {}, getElementById() { return null; }, hidden: false },
+  document: {
+    addEventListener() {},
+    getElementById(id) { return elements[id] || null; },
+    querySelectorAll() { return []; },
+    hidden: false
+  },
   localStorage,
   navigator: {},
   window: {
@@ -80,5 +89,29 @@ const dailyAverage = vm.runInContext(`(() => {
 })()`, context);
 assert.equal(dailyAverage.average, 15000);
 assert.match(dailyAverage.label, /再次挑战/);
+
+const leaderboardControls = vm.runInContext(`(() => {
+  app.leaderboardMode = 'daily';
+  app.leaderboardTimeframe = 'all';
+  renderLeaderboardControls();
+  const daily = {
+    value: $('leaderboardTimeframe').value,
+    disabled: $('leaderboardTimeframe').disabled
+  };
+  app.leaderboardMode = 'replay';
+  renderLeaderboardControls();
+  const replay = {
+    value: $('leaderboardTimeframe').value,
+    disabled: $('leaderboardTimeframe').disabled
+  };
+  return { daily, replay };
+})()`, context);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(leaderboardControls)),
+  {
+    daily: { value: 'all', disabled: false },
+    replay: { value: 'today', disabled: true }
+  }
+);
 
 console.log('Frontend storage and score statistics tests passed.');
