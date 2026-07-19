@@ -569,6 +569,7 @@ html.scroll-locked, html.scroll-locked body { overflow: hidden; height: 100%; }
   grid-auto-rows: minmax(0, 1fr);
   align-items: stretch;
   gap: clamp(6px, 1.2vh, 10px);
+  touch-action: none;
 }
 .game-board.ready {
   border: 3px solid var(--line);
@@ -618,8 +619,10 @@ html.scroll-locked, html.scroll-locked body { overflow: hidden; height: 100%; }
   font-size: clamp(20px, calc(56px - var(--size) * 5px), 37px);
   font-weight: 900;
   cursor: pointer;
+  touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   box-shadow: 0 3px 0 rgba(25, 68, 93, .24);
   transition: transform .08s ease, opacity .12s ease, background .12s ease, border-color .12s ease, box-shadow .12s ease;
 }

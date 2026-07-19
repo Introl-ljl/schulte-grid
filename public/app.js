@@ -186,6 +186,9 @@ function registerServiceWorker() {
 }
 
 function bindEvents() {
+  const grid = $('grid');
+  if ('PointerEvent' in window) grid.addEventListener('pointerdown', handleGridPointerDown);
+  grid.addEventListener('click', handleGridClick);
   $('startBtn').addEventListener('click', requestDailyStart);
   $('infiniteBtn').addEventListener('click', requestInfiniteStart);
   $('modeButtons').addEventListener('click', (event) => {
@@ -429,7 +432,7 @@ function renderGame() {
   $('maxLabel').textContent = end;
   $('errorLabel').textContent = `错误 ${totalErrors()}`;
   $('gameModeBadge').textContent = modeLabel(app.active.mode);
-  $('gameHelp').textContent = '请按数字从小到大依次点击';
+  $('gameHelp').textContent = '请按数字从小到大依次点击，触屏可使用多指';
   $('abandonBtn').textContent = app.active.mode === 'daily' ? '放弃今日挑战' : app.active.mode === 'replay' ? '退出复战' : '退出无限模式';
   $('abandonBtn').classList.remove('hidden');
   $('resetBtn').classList.toggle('hidden', app.active.mode === 'daily');
@@ -452,15 +455,54 @@ function renderGame() {
   grid.innerHTML = '';
   for (const cell of visibleStageCells(stage, app.active.target)) {
     const button = document.createElement('button');
-    button.className = `grid-cell${cell.highlighted ? ' done' : ''}${cell.revealed ? ' revealed' : ''}${cell.empty ? ' empty' : ''}`;
-    button.textContent = cell.value ?? '';
-    if (cell.value != null) button.dataset.value = cell.value;
-    button.setAttribute('aria-label', cell.empty ? '已完成' : `数字 ${cell.value}${cell.highlighted ? '，已完成' : ''}`);
-    button.disabled = cell.empty || cell.highlighted || !app.active.stageStartedAt;
-    if (cell.value != null) button.addEventListener('click', () => handleCell(button, cell.value));
+    syncGridCell(button, cell);
     grid.appendChild(button);
   }
   paintTimer(true);
+}
+
+function syncGridCell(button, cell) {
+  button.className = `grid-cell${cell.highlighted ? ' done' : ''}${cell.revealed ? ' revealed' : ''}${cell.empty ? ' empty' : ''}`;
+  button.textContent = cell.value ?? '';
+  if (cell.value == null) delete button.dataset.value;
+  else button.dataset.value = cell.value;
+  button.setAttribute('aria-label', cell.empty ? '已完成' : `数字 ${cell.value}${cell.highlighted ? '，已完成' : ''}`);
+  button.disabled = cell.empty || cell.highlighted || !app.active.stageStartedAt;
+}
+
+function refreshFiftyGrid(stage) {
+  const buttons = $('grid').children;
+  const cells = visibleStageCells(stage, app.active.target);
+  if (buttons.length !== cells.length) {
+    renderGame();
+    return;
+  }
+  cells.forEach((cell, index) => syncGridCell(buttons[index], cell));
+}
+
+function gridCellFromEvent(event) {
+  const button = event.target.closest?.('.grid-cell');
+  return button && $('grid').contains(button) ? button : null;
+}
+
+function activateGridCell(button) {
+  if (!button || button.disabled) return;
+  const value = Number(button.dataset.value);
+  if (!Number.isInteger(value)) return;
+  handleCell(button, value);
+}
+
+function handleGridPointerDown(event) {
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  const button = gridCellFromEvent(event);
+  if (!button) return;
+  event.preventDefault();
+  activateGridCell(button);
+}
+
+function handleGridClick(event) {
+  if ('PointerEvent' in window && event.detail !== 0) return;
+  activateGridCell(gridCellFromEvent(event));
 }
 
 function handleCell(button, value) {
@@ -483,7 +525,9 @@ function handleCell(button, value) {
   } else {
     const stage = currentStage();
     if (stage.type === 'fifty') {
-      renderGame();
+      refreshFiftyGrid(stage);
+      $('targetLabel').textContent = app.active.target;
+      $('progressBar').style.width = `${((app.active.target - stageStartValue(stage)) / (stageEndValue(stage) - stageStartValue(stage) + 1)) * 100}%`;
       return;
     }
     if (stage.type === 'simple') {

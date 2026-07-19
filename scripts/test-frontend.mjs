@@ -4,6 +4,9 @@ import vm from 'node:vm';
 
 const storage = new Map();
 const elements = {
+  grid: {
+    contains: (element) => Boolean(element?.inGrid)
+  },
   leaderboardSize: { value: '3', disabled: false },
   leaderboardTimeframe: { value: 'today', disabled: false }
 };
@@ -114,4 +117,36 @@ assert.deepEqual(
   }
 );
 
-console.log('Frontend storage and score statistics tests passed.');
+const pointerInput = vm.runInContext(`(() => {
+  const values = [];
+  const originalHandleCell = handleCell;
+  handleCell = (_button, value) => values.push(value);
+  const makeButton = (value) => ({
+    inGrid: true,
+    disabled: false,
+    dataset: { value: String(value) },
+    closest: () => null
+  });
+  const first = makeButton(1);
+  const second = makeButton(2);
+  first.closest = () => first;
+  second.closest = () => second;
+  let prevented = 0;
+  handleGridPointerDown({ pointerId: 11, pointerType: 'touch', button: 0, target: first, preventDefault: () => prevented += 1 });
+  handleGridPointerDown({ pointerId: 12, pointerType: 'touch', button: 0, target: second, preventDefault: () => prevented += 1 });
+  const disabled = makeButton(3);
+  disabled.disabled = true;
+  disabled.closest = () => disabled;
+  handleGridPointerDown({ pointerId: 13, pointerType: 'touch', button: 0, target: disabled, preventDefault: () => prevented += 1 });
+  window.PointerEvent = function PointerEvent() {};
+  const keyboard = makeButton(4);
+  keyboard.closest = () => keyboard;
+  handleGridClick({ detail: 1, target: keyboard });
+  handleGridClick({ detail: 0, target: keyboard });
+  delete window.PointerEvent;
+  handleCell = originalHandleCell;
+  return { values, prevented };
+})()`, context);
+assert.deepEqual(JSON.parse(JSON.stringify(pointerInput)), { values: [1, 2, 4], prevented: 3 });
+
+console.log('Frontend storage, score statistics, and multi-pointer input tests passed.');

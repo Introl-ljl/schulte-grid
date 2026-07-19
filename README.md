@@ -4,6 +4,8 @@
 
 前端仍是原生 HTML/CSS/JS，静态资源位于 `public/`。Vercel Functions 只负责同源安全代理，用户、正式运行和成绩由当前服务器上的 `backend/` Node 服务处理，并写入 Docker Compose 管理的 PostgreSQL。
 
+棋盘使用 Pointer Events 在按下瞬间处理输入，支持多个触点并发点击；键盘与辅助技术仍通过原生按钮的 `click` 事件操作。
+
 ## 用户与排行榜规则
 
 - 入口是公共链接，不使用邮箱或 OAuth。首次打开必须输入用户名和 4 位 PIN 登录，没有用户时可以自由注册并自动登录。
