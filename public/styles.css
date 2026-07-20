@@ -59,7 +59,7 @@
 [data-contrast="high"] {
   --muted: #4a4438;
   --soft: #6f6857;
-  --cell-bg: hsl(var(--grid-hue) 72% 92%);
+  --cell-bg: hsl(var(--grid-hue) 70% 82%);
 }
 [data-theme="dark"][data-contrast="high"] { --muted: #ded7c4; --soft: #b3ab94; }
 [data-grid-theme="0"] { --grid-hue: 205; }
