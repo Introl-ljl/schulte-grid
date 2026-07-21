@@ -3,12 +3,15 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 
 const storage = new Map();
+const lbReplayToggle = { hidden: true, classList: { toggle(cls, force) { lbReplayToggle.hidden = Boolean(force); } } };
 const elements = {
   grid: {
     contains: (element) => Boolean(element?.inGrid)
   },
   leaderboardSize: { value: '3', disabled: false },
-  leaderboardTimeframe: { value: 'today', disabled: false }
+  leaderboardTimeframe: { value: 'today', disabled: false },
+  lbReplayToggle,
+  lbShowReplay: { checked: false }
 };
 const localStorage = {
   getItem: (key) => storage.has(key) ? storage.get(key) : null,
@@ -91,29 +94,31 @@ const dailyAverage = vm.runInContext(`(() => {
   };
 })()`, context);
 assert.equal(dailyAverage.average, 15000);
-assert.match(dailyAverage.label, /再次挑战/);
+assert.match(dailyAverage.label, /复战/);
 
 const leaderboardControls = vm.runInContext(`(() => {
   app.leaderboardMode = 'daily';
   app.leaderboardTimeframe = 'all';
+  app.data.showReplay = true;
   renderLeaderboardControls();
   const daily = {
     value: $('leaderboardTimeframe').value,
-    disabled: $('leaderboardTimeframe').disabled
+    disabled: $('leaderboardTimeframe').disabled,
+    toggleHidden: $('lbReplayToggle').hidden,
+    showReplay: $('lbShowReplay').checked
   };
-  app.leaderboardMode = 'replay';
+  app.leaderboardMode = 'classic';
   renderLeaderboardControls();
-  const replay = {
-    value: $('leaderboardTimeframe').value,
-    disabled: $('leaderboardTimeframe').disabled
+  const classic = {
+    toggleHidden: $('lbReplayToggle').hidden
   };
-  return { daily, replay };
+  return { daily, classic };
 })()`, context);
 assert.deepEqual(
   JSON.parse(JSON.stringify(leaderboardControls)),
   {
-    daily: { value: 'all', disabled: false },
-    replay: { value: 'today', disabled: true }
+    daily: { value: 'all', disabled: false, toggleHidden: false, showReplay: true },
+    classic: { toggleHidden: true }
   }
 );
 

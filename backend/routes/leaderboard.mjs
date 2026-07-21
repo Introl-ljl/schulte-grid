@@ -10,6 +10,7 @@ export async function GET(request) {
       mode: url.searchParams.get('mode') || 'daily',
       gridSize: url.searchParams.get('size'),
       timeframe: url.searchParams.get('timeframe') || 'today',
+      includeReplay: url.searchParams.get('replay') === '1',
       userId: user?.id || null
     });
     return json(leaderboard);

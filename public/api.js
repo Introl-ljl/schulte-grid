@@ -25,9 +25,10 @@ window.SchulteApi = (() => {
     logout: () => request('/api/session', { method: 'DELETE' }),
     startRun: (run) => request('/api/runs/start', { method: 'POST', body: run }),
     finishRun: (result) => request('/api/runs/finish', { method: 'POST', body: result }),
-    leaderboard: ({ mode, size, timeframe }) => {
+    leaderboard: ({ mode, size, timeframe, includeReplay }) => {
       const query = new URLSearchParams({ mode, timeframe });
       if (size) query.set('size', size);
+      if (includeReplay != null) query.set('replay', includeReplay ? '1' : '0');
       return request(`/api/leaderboard?${query}`);
     }
   };

@@ -22,7 +22,8 @@ export async function POST(request) {
     if (!rows.length) throw new HttpError(404, 'RUN_NOT_FOUND', '找不到本次竞赛运行');
     const run = rows[0];
     if (run.score_id) {
-      const leaderboard = await getLeaderboard({ mode: run.mode, gridSize: run.grid_size, timeframe: 'today', userId: user.id });
+      const boardMode = (run.mode === 'daily' || run.mode === 'replay') ? 'daily' : run.mode;
+      const leaderboard = await getLeaderboard({ mode: boardMode, gridSize: run.grid_size, timeframe: 'today', includeReplay: true, userId: user.id });
       const ranked = leaderboard.entries.find((entry) => entry.id === run.score_id) || null;
       const stages = Array.isArray(run.score_stages) ? run.score_stages : JSON.parse(run.score_stages || '[]');
       return json({
@@ -58,7 +59,8 @@ export async function POST(request) {
       `;
     });
     if (!inserted.length) throw new HttpError(409, 'RUN_ALREADY_FINISHED', '本次竞赛运行已经结束');
-    const leaderboard = await getLeaderboard({ mode: run.mode, gridSize: run.grid_size, timeframe: 'today', userId: user.id });
+    const boardMode = (run.mode === 'daily' || run.mode === 'replay') ? 'daily' : run.mode;
+    const leaderboard = await getLeaderboard({ mode: boardMode, gridSize: run.grid_size, timeframe: 'today', includeReplay: true, userId: user.id });
     const ranked = leaderboard.entries.find((entry) => entry.id === scoreId) || null;
     return json({
       accepted: true,

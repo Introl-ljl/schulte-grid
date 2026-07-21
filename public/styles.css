@@ -932,6 +932,26 @@ html.scroll-locked, html.scroll-locked body { overflow: hidden; height: 100%; }
   box-shadow: 3px 3px 0 var(--line);
 }
 .leaderboard-filters select:disabled { opacity: .45; }
+.lb-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 9px 14px;
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--line);
+  flex: 0 0 auto;
+  align-self: stretch;
+  user-select: none;
+}
+.lb-toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--purple); cursor: pointer; }
+.lb-toggle.hidden { display: none; }
 
 /* Benchmark hero tower */
 .lb-benchmark { margin: 2px 0; }
@@ -1057,6 +1077,7 @@ html.scroll-locked, html.scroll-locked body { overflow: hidden; height: 100%; }
   white-space: nowrap;
   color: var(--ink);
 }
+.lb-replay-mark { font-style: normal; color: var(--purple); font-weight: 900; margin-left: 3px; cursor: help; }
 .lb-time.tier-today-fastest { color: var(--purple); }
 .lb-time.tier-overall-fastest { color: var(--record-purple); }
 .lb-time.tier-normal { color: var(--green); }

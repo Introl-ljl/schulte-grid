@@ -4,7 +4,7 @@ import { shanghaiDate } from './time.mjs';
 
 export const LEADERBOARD_LIMIT = 20;
 
-export async function getLeaderboard({ mode, gridSize = null, timeframe = 'today', userId = null }) {
+export async function getLeaderboard({ mode, gridSize = null, timeframe = 'today', userId = null, includeReplay = false }) {
   if (!['daily', 'replay', 'easy', 'classic', 'fifty'].includes(mode)) throw new HttpError(400, 'INVALID_MODE', '排行榜玩法无效');
   if (!['today', 'all'].includes(timeframe)) throw new HttpError(400, 'INVALID_TIMEFRAME', '排行榜时间范围无效');
   const size = (mode === 'daily' || mode === 'replay') ? null : mode === 'fifty' ? 5 : Number(gridSize);
@@ -15,10 +15,11 @@ export async function getLeaderboard({ mode, gridSize = null, timeframe = 'today
   const sql = getSql();
   const dailyShaped = mode === 'daily' || mode === 'replay';
   const effectiveTimeframe = mode === 'replay' ? 'today' : timeframe;
+  const merged = mode === 'daily' && includeReplay;
   const [entries, benchmarks, participantCount] = await Promise.all([
-    dailyShaped ? dailyEntries(sql, mode, effectiveTimeframe, today) : infiniteEntries(sql, mode, size, effectiveTimeframe, today),
-    loadBenchmarks(sql, mode, size, today),
-    loadParticipantCount(sql, mode, size, effectiveTimeframe, today)
+    dailyShaped ? dailyEntries(sql, mode, effectiveTimeframe, today, merged) : infiniteEntries(sql, mode, size, effectiveTimeframe, today),
+    loadBenchmarks(sql, mode, size, today, merged),
+    loadParticipantCount(sql, mode, size, effectiveTimeframe, today, merged)
   ]);
   return {
     mode,
@@ -31,7 +32,15 @@ export async function getLeaderboard({ mode, gridSize = null, timeframe = 'today
   };
 }
 
-async function loadParticipantCount(sql, mode, size, timeframe, date) {
+async function loadParticipantCount(sql, mode, size, timeframe, date, merged) {
+  if (merged) {
+    if (timeframe === 'today') {
+      const [row] = await sql`SELECT count(*)::int AS total FROM scores WHERE mode IN ('daily', 'replay') AND score_date = ${date}`;
+      return Number(row?.total || 0);
+    }
+    const [row] = await sql`SELECT count(*)::int AS total FROM scores WHERE mode IN ('daily', 'replay')`;
+    return Number(row?.total || 0);
+  }
   if (mode === 'replay' || (mode === 'daily' && timeframe === 'today')) {
     const [row] = await sql`SELECT count(*)::int AS total FROM scores WHERE mode = ${mode} AND score_date = ${date}`;
     return Number(row?.total || 0);
@@ -54,11 +63,41 @@ async function loadParticipantCount(sql, mode, size, timeframe, date) {
   return Number(row?.total || 0);
 }
 
-async function dailyEntries(sql, mode, timeframe, date) {
+async function dailyEntries(sql, mode, timeframe, date, merged) {
+  if (merged) {
+    if (timeframe === 'all') {
+      return sql`
+        WITH ordered AS (
+          SELECT s.id, s.user_id, u.display_name AS username, s.score_date, s.mode,
+            s.total_ms, s.total_errors, s.stages, s.completed_at,
+            row_number() OVER (ORDER BY s.total_ms, s.total_errors, s.completed_at) AS rank
+          FROM scores s
+          JOIN users u ON u.id = s.user_id
+          WHERE s.mode IN ('daily', 'replay')
+        )
+        SELECT * FROM ordered
+        WHERE rank <= ${LEADERBOARD_LIMIT}
+        ORDER BY rank
+      `;
+    }
+    return sql`
+      WITH ordered AS (
+        SELECT s.id, s.user_id, u.display_name AS username, s.score_date, s.mode,
+          s.total_ms, s.total_errors, s.stages, s.completed_at,
+          row_number() OVER (ORDER BY s.total_ms, s.total_errors, s.completed_at) AS rank
+        FROM scores s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.mode IN ('daily', 'replay') AND s.score_date = ${date}
+      )
+      SELECT * FROM ordered
+      WHERE rank <= ${LEADERBOARD_LIMIT}
+      ORDER BY rank
+    `;
+  }
   if (mode === 'daily' && timeframe === 'all') {
     return sql`
       WITH ordered AS (
-        SELECT s.id, s.user_id, u.display_name AS username, s.score_date,
+        SELECT s.id, s.user_id, u.display_name AS username, s.score_date, s.mode,
           s.total_ms, s.total_errors, s.stages, s.completed_at,
           row_number() OVER (ORDER BY s.total_ms, s.total_errors, s.completed_at) AS rank
         FROM scores s
@@ -72,7 +111,7 @@ async function dailyEntries(sql, mode, timeframe, date) {
   }
   return sql`
     WITH ordered AS (
-      SELECT s.id, s.user_id, u.display_name AS username, s.score_date,
+      SELECT s.id, s.user_id, u.display_name AS username, s.score_date, s.mode,
         s.total_ms, s.total_errors, s.stages, s.completed_at,
         row_number() OVER (ORDER BY s.total_ms, s.total_errors, s.completed_at) AS rank
       FROM scores s
@@ -116,20 +155,22 @@ async function infiniteEntries(sql, mode, size, timeframe, date) {
   `;
 }
 
-async function loadBenchmarks(sql, mode, size, date) {
+async function loadBenchmarks(sql, mode, size, date, merged) {
   const dailyShaped = mode === 'daily' || mode === 'replay';
+  const wTotal = merged ? sql`mode IN ('daily', 'replay')` : sql`mode = ${mode}`;
+  const wStage = merged ? sql`s.mode IN ('daily', 'replay')` : sql`s.mode = ${mode}`;
   const [todayTotal, overallTotal, todayStages, overallStages] = await Promise.all([
     dailyShaped
       ? sql`
         SELECT min(total_ms)::int AS fastest, percentile_cont(0.5) WITHIN GROUP (ORDER BY total_ms)::int AS median
-        FROM scores WHERE mode = ${mode} AND score_date = ${date}
+        FROM scores WHERE ${wTotal} AND score_date = ${date}
       `
       : sql`
         SELECT min(total_ms)::int AS fastest, percentile_cont(0.5) WITHIN GROUP (ORDER BY total_ms)::int AS median
         FROM scores WHERE mode = ${mode} AND grid_size = ${size} AND score_date = ${date}
       `,
     dailyShaped
-      ? sql`SELECT min(total_ms)::int AS fastest FROM scores WHERE mode = ${mode}`
+      ? sql`SELECT min(total_ms)::int AS fastest FROM scores WHERE ${wTotal}`
       : sql`SELECT min(total_ms)::int AS fastest FROM scores WHERE mode = ${mode} AND grid_size = ${size}`,
     dailyShaped
       ? sql`
@@ -137,7 +178,7 @@ async function loadBenchmarks(sql, mode, size, date) {
           min((stage->>'durationMs')::int)::int AS fastest,
           percentile_cont(0.5) WITHIN GROUP (ORDER BY (stage->>'durationMs')::int)::int AS median
         FROM scores s CROSS JOIN LATERAL jsonb_array_elements(s.stages) WITH ORDINALITY AS item(stage, ordinality)
-        WHERE s.mode = ${mode} AND s.score_date = ${date}
+        WHERE ${wStage} AND s.score_date = ${date}
         GROUP BY ordinality ORDER BY ordinality
       `
       : sql`
@@ -152,7 +193,7 @@ async function loadBenchmarks(sql, mode, size, date) {
       ? sql`
         SELECT ordinality::int - 1 AS stage_index, min((stage->>'durationMs')::int)::int AS fastest
         FROM scores s CROSS JOIN LATERAL jsonb_array_elements(s.stages) WITH ORDINALITY AS item(stage, ordinality)
-        WHERE s.mode = ${mode} GROUP BY ordinality ORDER BY ordinality
+        WHERE ${wStage} GROUP BY ordinality ORDER BY ordinality
       `
       : sql`
         SELECT ordinality::int - 1 AS stage_index, min((stage->>'durationMs')::int)::int AS fastest
@@ -186,6 +227,7 @@ function serializeEntry(entry, benchmarks, userId) {
     id: entry.id,
     rank: Number(entry.rank),
     username: entry.username,
+    mode: entry.mode || null,
     scoreDate: dateOrNull(entry.score_date),
     totalMs: Number(entry.total_ms),
     totalErrors: Number(entry.total_errors),

@@ -1,7 +1,7 @@
 const TIME_ZONE = 'Asia/Shanghai';
 const STORAGE_KEY = 'schulte-daily-v2';
 const LEGACY_STORAGE_KEY = 'schulte-daily-v1';
-const UPDATE_LOG_KEY = 'schulte-update-replay-scored-v1';
+const UPDATE_LOG_KEY = 'schulte-update-merged-board-v1';
 const INFINITE_MODES = {
   easy: { label: '简单模式' },
   classic: { label: '经典模式' },
@@ -37,7 +37,6 @@ const app = {
   apiAvailable: true,
   pendingStartMode: null,
   dailyLeaderboard: null,
-  replayLeaderboard: null,
   leaderboardMode: 'daily',
   leaderboardSize: 3,
   leaderboardTimeframe: 'today'
@@ -54,7 +53,6 @@ async function initialize() {
   await loadAccount();
   await loadLevels();
   await refreshDailyLeaderboard();
-  await refreshReplayLeaderboard();
   renderHome();
   if (app.currentUser) showUpdateLogOnce();
   else showUser();
@@ -153,7 +151,6 @@ async function acceptUser(user) {
   applySettings();
   closeModal('userModal');
   await refreshDailyLeaderboard();
-  await refreshReplayLeaderboard();
   renderHome();
   app.pendingStartMode = null;
   showUpdateLogOnce();
@@ -170,7 +167,6 @@ async function logoutUser() {
   app.data = loadData(null);
   app.active = null;
   app.dailyLeaderboard = null;
-  app.replayLeaderboard = null;
   renderUser();
   applySettings();
   showHome();
@@ -200,7 +196,6 @@ function bindEvents() {
     if (size) selectSize(size);
   });
   $('dailyShareBtn').addEventListener('click', () => shareResult(app.data.records[app.date]));
-  $('dailyReplayBtn').addEventListener('click', requestReplayStart);
   $('guideStartBtn').addEventListener('click', async () => {
     app.data.seenGuide = true;
     saveData();
@@ -250,6 +245,11 @@ function bindEvents() {
   });
   $('leaderboardTimeframe').addEventListener('change', (event) => {
     app.leaderboardTimeframe = event.target.value;
+    loadLeaderboard();
+  });
+  $('lbShowReplay').addEventListener('change', (event) => {
+    app.data.showReplay = event.target.checked;
+    saveData();
     loadLeaderboard();
   });
 
@@ -306,12 +306,7 @@ async function loadLevels() {
 
 function requestDailyStart() {
   if (!app.level) return;
-  requestStart('daily');
-}
-
-function requestReplayStart() {
-  if (!app.level) return;
-  requestStart('replay');
+  requestStart(playedDailyToday() ? 'replay' : 'daily');
 }
 
 function requestInfiniteStart() {
@@ -644,8 +639,8 @@ function renderResult(result, savedAsFirst, newBest = false) {
     stagesEl.innerHTML = '';
   }
   if (isReplay) {
-    $('resultCompareLabel').textContent = result.globalRank ? '复战排名' : '复战说明';
-    $('resultCompare').textContent = result.globalRank ? `第 ${result.globalRank} 名` : '随机布局 · 独立排行';
+    $('resultCompareLabel').textContent = result.globalRank ? '每日排名' : '复战说明';
+    $('resultCompare').textContent = result.globalRank ? `第 ${result.globalRank} 名` : '随机布局 · 合并入每日榜';
   } else {
     $('resultCompareLabel').textContent = result.globalRank
       ? '全局排名'
@@ -671,10 +666,10 @@ function renderResult(result, savedAsFirst, newBest = false) {
               : '本次成绩正在同步到每日榜。')
     : isReplay
       ? (result.syncError
-          ? `本地成绩已保存，但未进入复战榜：${result.syncError}`
+          ? `本地成绩已保存，但未进入每日榜：${result.syncError}`
           : result.globalRank
-            ? `成绩已进入复战 Top 20，目前排名第 ${result.globalRank}。`
-            : result.recorded ? '成绩已保存，当前未进入复战 Top 20。' : '成绩正在同步到复战榜。')
+            ? `成绩已进入每日 Top 20，目前排名第 ${result.globalRank}。`
+            : result.recorded ? '成绩已保存，当前未进入每日 Top 20。' : '成绩正在同步到每日榜。')
       : result.syncError
         ? `本地成绩已保存，但未进入全局榜：${result.syncError}`
         : result.globalRank
@@ -684,6 +679,8 @@ function renderResult(result, savedAsFirst, newBest = false) {
           : newBest
             ? `本地新纪录！正在同步${infiniteResultName(result)}全局榜。`
             : `成绩正在同步，当前本地最快为 ${formatDuration(bestResultFor(result)?.totalMs || result.totalMs)}。`;
+  $('restartBtn').textContent = isDaily ? '开始复战 · 随机布局' : '重新开始';
+  $('restartBtn').classList.toggle('danger-fill', !isDaily);
   updateHudStars(activeLevel().stages.length, activeLevel().stages.length);
 }
 
@@ -709,11 +706,10 @@ async function submitCompetitiveResult(result, savedAsFirst, newBest) {
         stages: response.ranking.stageTiers
       };
     }
-    if (result.mode === 'daily') {
+    if (result.mode === 'daily' || result.mode === 'replay') {
       app.dailyLeaderboard = response.leaderboard;
-      if (result.recorded === false) syncDailyStateFromServer(true);
+      if (result.mode === 'daily' && result.recorded === false) syncDailyStateFromServer(true);
     }
-    if (result.mode === 'replay') app.replayLeaderboard = response.leaderboard;
     renderResult(result, savedAsFirst && result.recorded !== false, newBest);
     if (result.mode === 'daily') renderHomeDynamicRanking();
   } catch (error) {
@@ -733,30 +729,20 @@ function comparisonLabel(result) {
 
 function recordTier(result) {
   if (result.globalTiers?.total) return result.globalTiers.total;
-  if (result.mode === 'daily') {
+  if (result.mode === 'daily' || result.mode === 'replay') {
     const entry = currentDailyEntry();
     if (entry && entry.totalMs === result.totalMs) return entry.tier;
     return tierFromBenchmark(result.totalMs, app.dailyLeaderboard?.benchmarks?.total);
-  }
-  if (result.mode === 'replay') {
-    const entry = currentReplayEntry();
-    if (entry && entry.totalMs === result.totalMs) return entry.tier;
-    return tierFromBenchmark(result.totalMs, app.replayLeaderboard?.benchmarks?.total);
   }
   return 'normal';
 }
 
 function stageTier(record, index) {
   if (record.globalTiers?.stages?.[index]) return record.globalTiers.stages[index];
-  if (record.mode === 'daily') {
+  if (record.mode === 'daily' || record.mode === 'replay') {
     const entry = currentDailyEntry();
     if (entry?.stages?.[index]?.durationMs === record.stages[index].durationMs) return entry.stages[index].tier;
     return tierFromBenchmark(record.stages[index].durationMs, app.dailyLeaderboard?.benchmarks?.stages?.[index]);
-  }
-  if (record.mode === 'replay') {
-    const entry = currentReplayEntry();
-    if (entry?.stages?.[index]?.durationMs === record.stages[index].durationMs) return entry.stages[index].tier;
-    return tierFromBenchmark(record.stages[index].durationMs, app.replayLeaderboard?.benchmarks?.stages?.[index]);
   }
   return 'normal';
 }
@@ -795,7 +781,7 @@ function restartChallenge() {
   if (!result) { showHome(); return; }
   const mode = result.mode || 'daily';
   app.active = null;
-  if (mode === 'daily') { showHome(); return; }
+  if (mode === 'daily') { requestStart('replay'); return; }
   app.activeMode = mode;
   app.selectedMode = mode;
   if (mode !== 'fifty' && result.stages?.[0]) app.selectedSize = result.stages[0].size;
@@ -826,7 +812,6 @@ function renderHome() {
   $('infiniteBtn').disabled = !app.level;
   renderModeButtons();
   $('dailyShareBtn').classList.toggle('hidden', !todayRecord);
-  $('dailyReplayBtn').classList.toggle('hidden', !todayRecord);
   const streak = calculateStreak();
   $('streakValue').textContent = streak;
   $('streakHint').textContent = streak ? (todayRecord ? '今天也完成了' : '完成今天以延续记录') : '完成今日挑战开始记录';
@@ -863,7 +848,7 @@ function renderModeButtons() {
 }
 
 function startButtonLabel() {
-  if (playedDailyToday()) return '再次挑战今日关卡 <span>→</span>';
+  if (playedDailyToday()) return '复战今日 · 随机布局 <span>→</span>';
   if (isDailyActive()) return '今日挑战进行中';
   return '开始今日挑战 <span>→</span>';
 }
@@ -1014,13 +999,14 @@ function renderLeaderboardControls() {
   for (const button of document.querySelectorAll('[data-board-mode]')) {
     button.classList.toggle('active', button.dataset.boardMode === app.leaderboardMode);
   }
-  const dailyShaped = app.leaderboardMode === 'daily' || app.leaderboardMode === 'replay';
-  const fixedToday = app.leaderboardMode === 'replay';
+  const dailyShaped = app.leaderboardMode === 'daily';
   const fifty = app.leaderboardMode === 'fifty';
   $('leaderboardSize').value = String(fifty ? 5 : app.leaderboardSize);
   $('leaderboardSize').disabled = dailyShaped || fifty;
-  $('leaderboardTimeframe').value = fixedToday ? 'today' : app.leaderboardTimeframe;
-  $('leaderboardTimeframe').disabled = fixedToday;
+  $('leaderboardTimeframe').value = app.leaderboardTimeframe;
+  $('leaderboardTimeframe').disabled = false;
+  $('lbReplayToggle').classList.toggle('hidden', !dailyShaped);
+  $('lbShowReplay').checked = app.data.showReplay;
 }
 
 async function loadLeaderboard() {
@@ -1030,15 +1016,14 @@ async function loadLeaderboard() {
   }
   $('leaderboardList').innerHTML = '<div class="empty-state">正在加载排行榜…</div>';
   try {
-    const dailyShaped = app.leaderboardMode === 'daily' || app.leaderboardMode === 'replay';
-    const fixedToday = app.leaderboardMode === 'replay';
+    const dailyShaped = app.leaderboardMode === 'daily';
     const board = await SchulteApi.leaderboard({
       mode: app.leaderboardMode,
       size: dailyShaped ? null : app.leaderboardMode === 'fifty' ? 5 : app.leaderboardSize,
-      timeframe: fixedToday ? 'today' : app.leaderboardTimeframe
+      timeframe: app.leaderboardTimeframe,
+      includeReplay: dailyShaped ? app.data.showReplay : undefined
     });
     if (board.mode === 'daily') app.dailyLeaderboard = board;
-    if (board.mode === 'replay') app.replayLeaderboard = board;
     renderLeaderboard(board);
     if (board.mode === 'daily') renderHomeDynamicRanking();
   } catch (error) {
@@ -1115,12 +1100,13 @@ function renderLeaderboard(board) {
   $('leaderboardList').innerHTML = board.entries.map((entry) => {
     const rankBadge = entry.rank <= 3 ? ['🥇', '🥈', '🥉'][entry.rank - 1] : `#${entry.rank}`;
     const entrySectors = sectorsHtml(entry.stages);
+    const replayMark = entry.mode === 'replay' ? '<em class="lb-replay-mark" title="复战成绩 · 随机布局">*</em>' : '';
     return `
     <article class="lb-row tier-${entry.tier}${entry.isMe ? ' is-me' : ''}">
       <div class="lb-rank"><b>${rankBadge}</b></div>
       <div class="lb-body">
         <div class="lb-line">
-          <strong class="lb-name">${escapeHtml(entry.username)}${entry.isMe ? '<em class="lb-you">你</em>' : ''}</strong>
+          <strong class="lb-name">${escapeHtml(entry.username)}${replayMark}${entry.isMe ? '<em class="lb-you">你</em>' : ''}</strong>
           <time class="lb-time tier-${entry.tier}">${formatDuration(entry.totalMs)}</time>
         </div>
         ${entrySectors}
@@ -1133,20 +1119,11 @@ function renderLeaderboard(board) {
 async function refreshDailyLeaderboard() {
   if (!app.apiAvailable) return;
   try {
-    app.dailyLeaderboard = await SchulteApi.leaderboard({ mode: 'daily', timeframe: 'today' });
+    app.dailyLeaderboard = await SchulteApi.leaderboard({ mode: 'daily', timeframe: 'today', includeReplay: app.data.showReplay });
     syncDailyStateFromServer();
     renderHomeDynamicRanking();
   } catch (error) {
     console.warn('每日排行榜刷新失败', error);
-  }
-}
-
-async function refreshReplayLeaderboard() {
-  if (!app.apiAvailable) return;
-  try {
-    app.replayLeaderboard = await SchulteApi.leaderboard({ mode: 'replay', timeframe: 'today' });
-  } catch (error) {
-    console.warn('复战排行榜刷新失败', error);
   }
 }
 
@@ -1177,11 +1154,9 @@ async function refreshDynamicRankings() {
 
 async function refreshResultRanking(result) {
   try {
-    const board = result.mode === 'daily'
+    const board = (result.mode === 'daily' || result.mode === 'replay')
       ? app.dailyLeaderboard
-      : result.mode === 'replay'
-        ? app.replayLeaderboard
-        : await SchulteApi.leaderboard({ mode: result.mode, size: result.mode === 'fifty' ? 5 : result.stages[0].size, timeframe: 'today' });
+      : await SchulteApi.leaderboard({ mode: result.mode, size: result.mode === 'fifty' ? 5 : result.stages[0].size, timeframe: 'today' });
     if (!board) return;
     result.globalTiers = {
       total: tierFromBenchmark(result.totalMs, board.benchmarks.total),
@@ -1200,11 +1175,7 @@ async function refreshResultRanking(result) {
 }
 
 function currentDailyEntry() {
-  return app.dailyLeaderboard?.entries?.find((entry) => entry.isMe) || null;
-}
-
-function currentReplayEntry() {
-  return app.replayLeaderboard?.entries?.find((entry) => entry.isMe) || null;
+  return app.dailyLeaderboard?.entries?.find((entry) => entry.isMe && entry.mode === 'daily') || null;
 }
 
 function tierFromBenchmark(value, benchmark) {
@@ -1452,6 +1423,7 @@ function normalizeData(data) {
   if (!data || typeof data !== 'object') return fresh;
   return {
     seenGuide: Boolean(data.seenGuide),
+    showReplay: data.showReplay !== false,
     records: data.records && typeof data.records === 'object' ? data.records : {},
     bestRecords: data.bestRecords && typeof data.bestRecords === 'object' ? data.bestRecords : {},
     infiniteHistory: data.infiniteHistory && typeof data.infiniteHistory === 'object' ? data.infiniteHistory : {},
@@ -1460,7 +1432,7 @@ function normalizeData(data) {
 }
 
 function defaultData() {
-  return { seenGuide: false, records: {}, bestRecords: {}, infiniteHistory: {}, settings: { ...DEFAULT_SETTINGS } };
+  return { seenGuide: false, showReplay: true, records: {}, bestRecords: {}, infiniteHistory: {}, settings: { ...DEFAULT_SETTINGS } };
 }
 
 function saveData() {
